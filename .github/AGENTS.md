@@ -58,7 +58,7 @@ quiet-chaos run --config examples/config.toml --once
 - **Ruff**: line-length 100, rules `E/F/I/UP/B/SIM`, double quotes — run `ruff format .` to auto-fix
 - **Pydantic v2** for all config; use `model_validator(mode="after")` for cross-field validation
 - Only **GET/HEAD** requests — the deny-list check runs before every request
-- `max_requests_per_second` is hard-capped at 1.0 — do not raise this ceiling
+- All request timing is controlled exclusively by `pacing.py` (`PacingConfig`) — there is no separate rate limiter
 
 ---
 
@@ -87,8 +87,6 @@ Container runs as **nonroot**; cache volume mounts at `/home/nonroot/.cache/quie
 
 ## Pitfalls
 
-- **Rate limit is strict**: `max_requests_per_second > 0` and `≤ 1.0` — Pydantic will reject anything higher
-- **Pacing adds on top of rate limiting** — setting both may produce very low effective throughput
 - **Pacing must respect the deadline**: any sleep in `pacing.py` or `traffic.py` must be capped to `min(pause, remaining_seconds)`; uncapped sleeps cause runs to exceed `run_for_seconds`
 - **Failure cooldown is per-domain** keyed on `urlparse().hostname` — not per-URL
 - **Retry only covers transient errors** (`ConnectError`, `TimeoutException`, `TransportError`) — HTTP 4xx/5xx never retry
