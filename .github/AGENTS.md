@@ -78,7 +78,7 @@ docker compose up --build          # default Compose (port 8080)
 curl http://localhost:8080         # health check
 
 # Host deployment example
-docker compose -f examples/docker-compose.host.yml up -d
+docker compose -f docker-compose.host.yml up -d
 ```
 
 Container runs as **nonroot**; cache volume mounts at `/home/nonroot/.cache/quiet-chaos`.
@@ -92,5 +92,5 @@ Container runs as **nonroot**; cache volume mounts at `/home/nonroot/.cache/quie
 - **Retry only covers transient errors** (`ConnectError`, `TimeoutException`, `TransportError`) — HTTP 4xx/5xx never retry
 - **SHA-256 cache keys** in `seed_sources.py` — do not switch back to Python's `hash()` (not stable across processes)
 - **Health server** is raw HTTP/1.1 (no framework) — `health.py` is intentionally simple
-- **Docker host Compose template** (`examples/docker-compose.host.yml`) must include a `build:` section pointing to the repo root; without it, `docker compose … up` fails silently on a fresh host that doesn't have the image cached
+- **Docker host Compose template** (`docker-compose.host.yml`) lives at the repo root (not under `examples/`) specifically so its `build: context: .` doesn't need to traverse out of the file's own directory — Git-based stack deployment tools (Dockhand, Portainer, etc.) commonly sandbox build context to the compose file's directory and reject `..` paths
 - **`uv run pytest`** regenerates `uv.lock` (not tracked) — see Quick Commands above

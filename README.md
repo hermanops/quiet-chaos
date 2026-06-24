@@ -35,7 +35,7 @@ The container runs as `nonroot`, reads `/app/config.toml`, and stores refreshed 
 For a dedicated Docker host, keep the host config at `/opt/quiet-chaos/config.toml`. From a checkout of this repository, build and run the host template:
 
 ```bash
-docker compose -f examples/docker-compose.host.yml up -d
+docker compose -f docker-compose.host.yml up -d
 ```
 
 Useful host checks:

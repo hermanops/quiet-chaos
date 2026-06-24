@@ -3,7 +3,7 @@ name: quiet-chaos
 services:
   quiet-chaos:
     build:
-      context: ..
+      context: .
       dockerfile: Dockerfile
     image: quiet-chaos:local
     restart: unless-stopped
