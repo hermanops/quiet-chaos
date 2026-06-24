@@ -73,8 +73,6 @@ class AppConfig(BaseModel):
     log_level: str = "info"
     json_logs: bool = True
     run_for_seconds: int | None = Field(default=None, ge=1)
-    max_requests_per_second: float = Field(default=1.0, gt=0, le=1.0)
-    per_domain_cooldown_seconds: float = Field(default=30.0, ge=0)
     request_timeout_seconds: float = Field(default=8.0, gt=0, le=60)
     max_response_bytes: int = Field(default=1_000_000, ge=1024, le=10_000_000)
     max_links_per_page: int = Field(default=30, ge=1, le=500)

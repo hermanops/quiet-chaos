@@ -17,7 +17,6 @@ from quiet_chaos.defaults import DEFAULT_SEARCH_QUERIES
 from quiet_chaos.fingerprints import browser_headers
 from quiet_chaos.health import RuntimeStats
 from quiet_chaos.pacing import next_pause_seconds
-from quiet_chaos.rate_limit import RateLimiter
 from quiet_chaos.safety import SafetyPolicy
 from quiet_chaos.seed_sources import SeedStore
 from quiet_chaos.telemetry import Telemetry
@@ -30,13 +29,11 @@ class TrafficGenerator:
         self,
         config: AppConfig,
         seeds: SeedStore,
-        rate_limiter: RateLimiter,
         stats: RuntimeStats,
         telemetry: Telemetry,
     ) -> None:
         self._config = config
         self._seeds = seeds
-        self._rate_limiter = rate_limiter
         self._stats = stats
         self._telemetry = telemetry
         self._safety = SafetyPolicy(config.deny_domains)
@@ -152,7 +149,6 @@ class TrafficGenerator:
         if self._failures.is_blocked(url):
             LOGGER.debug("skipping cooled-down domain", extra={"qc_url": url})
             return None
-        await self._rate_limiter.wait_for(url)
         headers = browser_headers(random.choice(self._config.user_agents))
         self._stats.requests_attempted += 1
         self._stats.last_url = url

@@ -3,18 +3,16 @@ import pytest
 
 from quiet_chaos.config import AppConfig
 from quiet_chaos.health import RuntimeStats
-from quiet_chaos.rate_limit import RateLimiter
 from quiet_chaos.seed_sources import SeedStore
 from quiet_chaos.telemetry import Telemetry
 from quiet_chaos.traffic import TrafficGenerator
 
 
 def make_generator(config: AppConfig | None = None) -> TrafficGenerator:
-    config = config or AppConfig(seed_sources=[], per_domain_cooldown_seconds=0)
+    config = config or AppConfig(seed_sources=[])
     return TrafficGenerator(
         config=config,
         seeds=SeedStore(config, cache_dir=None),  # type: ignore[arg-type]
-        rate_limiter=RateLimiter(1, 0),
         stats=RuntimeStats.start(),
         telemetry=Telemetry(False, "test"),
     )
@@ -54,7 +52,6 @@ def test_extract_links_skips_visited_urls() -> None:
 def test_choose_url_can_reinject_root_seed() -> None:
     config = AppConfig(
         seed_sources=[],
-        per_domain_cooldown_seconds=0,
         seed_reinjection_probability=1.0,
     )
     generator = make_generator(config)
@@ -67,7 +64,6 @@ def test_choose_url_can_reinject_root_seed() -> None:
 async def test_safe_request_retries_transient_failure() -> None:
     config = AppConfig(
         seed_sources=[],
-        per_domain_cooldown_seconds=0,
         max_request_retries=1,
         retry_backoff_seconds=0,
     )
@@ -92,7 +88,6 @@ async def test_safe_request_retries_transient_failure() -> None:
 async def test_pacing_pause_respects_deadline(monkeypatch: pytest.MonkeyPatch) -> None:
     config = AppConfig(
         seed_sources=[],
-        per_domain_cooldown_seconds=0,
         pacing={
             "idle_min_seconds": 10.0,
             "idle_max_seconds": 10.0,

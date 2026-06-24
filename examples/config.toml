@@ -1,8 +1,6 @@
 log_level = "info"
 json_logs = true
 run_for_seconds = 3600
-max_requests_per_second = 1.0
-per_domain_cooldown_seconds = 30.0
 request_timeout_seconds = 8.0
 max_links_per_page = 30
 visited_url_cache_size = 5000
@@ -41,12 +39,11 @@ url = "https://tranco-list.eu/top-1m.csv.zip"
 limit = 500
 refresh_hours = 24
 
-# Optional alternate public seed source from CrUX top lists.
-# [[seed_sources]]
-# kind = "crux_gzip_csv"
-# url = "https://raw.githubusercontent.com/zakird/crux-top-lists/main/data/global/current.csv.gz"
-# limit = 500
-# refresh_hours = 24
+[[seed_sources]]
+kind = "crux_gzip_csv"
+url = "https://raw.githubusercontent.com/zakird/crux-top-lists/main/data/global/current.csv.gz"
+limit = 500
+refresh_hours = 24
 
 [user_agent_source]
 enabled = false

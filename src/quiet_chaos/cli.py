@@ -10,7 +10,6 @@ import typer
 from quiet_chaos.config import load_config
 from quiet_chaos.events import configure_logging
 from quiet_chaos.health import RuntimeStats, start_health_server
-from quiet_chaos.rate_limit import RateLimiter
 from quiet_chaos.seed_sources import SeedStore
 from quiet_chaos.telemetry import Telemetry
 from quiet_chaos.traffic import TrafficGenerator
@@ -80,10 +79,6 @@ async def _run(config_path: Path | None, cache_dir: Path, refresh_seeds: bool, o
     generator = TrafficGenerator(
         config=config,
         seeds=seed_store,
-        rate_limiter=RateLimiter(
-            config.max_requests_per_second,
-            config.per_domain_cooldown_seconds,
-        ),
         stats=stats,
         telemetry=telemetry,
     )

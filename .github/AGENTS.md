@@ -38,7 +38,6 @@ quiet-chaos run --config examples/config.toml --once
 | `cli.py` | Typer entry point (`run` command) |
 | `config.py` | Pydantic v2 `AppConfig`; loads TOML; validates all options |
 | `traffic.py` | Core `TrafficGenerator`; orchestrates modes, visited-URL tracking, retries |
-| `rate_limit.py` | `RateLimiter`; global `max_requests_per_second` ≤ 1.0 + per-domain cooldown |
 | `bounded.py` | `LRUSet` + `FailureCooldown`; memory-bounded tracking |
 | `fingerprints.py` | Coherent browser-family `Accept`/`Accept-Language` headers |
 | `pacing.py` | Bounded idle + occasional long pauses; optional diurnal weight |
