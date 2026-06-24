@@ -2,7 +2,7 @@
 
 Quiet Chaos is a bounded, observable traffic noise generator for personal privacy experiments. It is a modern successor to older `noisy`-style crawlers, with explicit rate limits, safe HTTP methods, structured logs, Docker-first operation, a health endpoint, and optional OpenTelemetry.
 
-The default configuration keeps traffic deliberately modest: at most one request per second globally, per-domain cooldowns, GET/HEAD only, no form submission, no login automation, no captcha bypassing, and deny rules for local/private networks.
+The default configuration keeps traffic deliberately modest: bounded pacing between actions, GET/HEAD only, no form submission, no login automation, no captcha bypassing, and deny rules for local/private networks.
 
 ## Features
 
@@ -32,7 +32,7 @@ curl http://localhost:8080
 
 The container runs as `nonroot`, reads `/app/config.toml`, and stores refreshed seed and user-agent caches in the `quiet-chaos-cache` volume mounted at `/home/nonroot/.cache/quiet-chaos`.
 
-For a dedicated Docker host, keep the host config at `/opt/quiet-chaos/config.toml`. From a checkout of this repository, build and run the host template:
+For a dedicated Docker host, keep the host config at `/opt/quiet-chaos/config.toml` — [examples/config.srv.toml](examples/config.srv.toml) is an always-on host profile (no `run_for_seconds` cap, diurnal pacing); copy it to that path before the first deploy. From a checkout of this repository, build and run the host template:
 
 ```bash
 docker compose -f docker-compose.host.yml up -d

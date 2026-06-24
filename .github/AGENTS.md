@@ -93,4 +93,5 @@ Container runs as **nonroot**; cache volume mounts at `/home/nonroot/.cache/quie
 - **SHA-256 cache keys** in `seed_sources.py` — do not switch back to Python's `hash()` (not stable across processes)
 - **Health server** is raw HTTP/1.1 (no framework) — `health.py` is intentionally simple
 - **Docker host Compose template** (`docker-compose.host.yml`) lives at the repo root (not under `examples/`) specifically so its `build: context: .` doesn't need to traverse out of the file's own directory — Git-based stack deployment tools (Dockhand, Portainer, etc.) commonly sandbox build context to the compose file's directory and reject `..` paths
+- **`examples/config.srv.toml` is not auto-loaded** — it's a tracked template for the `docker-compose.host.yml` bind mount at `/opt/quiet-chaos/config.toml`; nothing in the `Dockerfile` or Compose files reads it directly, so it must be copied onto the host manually before each fresh deploy
 - **`uv run pytest`** regenerates `uv.lock` (not tracked) — see Quick Commands above
