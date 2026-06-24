@@ -77,7 +77,7 @@ Important defaults:
 - `modes = ["http", "dns", "rss", "search", "assets"]`
 - `seed_sources` defaults to `https://tranco-list.eu/top-1m.csv.zip`
 - `user_agent_source.enabled = false` by default; set it to `true` to cache fresh user agents from `useragents.me`
-- `pacing.enabled = true` adds small bounded pauses between actions; configure `idle_min_seconds`, `idle_max_seconds`, and `long_pause_probability` to tune the cadence
+- `pacing.enabled = true` adds small bounded pauses between actions; see `[pacing]` in [examples/config.toml](examples/config.toml) for the tunable parameters
 - `stats_log.interval_seconds = 300` emits periodic structured counters for Docker log collection
 - `max_request_retries = 1` retries transient network failures once with jittered backoff
 - `seed_reinjection_probability = 0.1` occasionally returns to root seeds instead of only following discovered links
