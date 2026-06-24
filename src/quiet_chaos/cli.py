@@ -14,6 +14,7 @@ from quiet_chaos.rate_limit import RateLimiter
 from quiet_chaos.seed_sources import SeedStore
 from quiet_chaos.telemetry import Telemetry
 from quiet_chaos.traffic import TrafficGenerator
+from quiet_chaos.user_agents import UserAgentStore
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 LOGGER = logging.getLogger(__name__)
@@ -60,7 +61,13 @@ async def _run(config_path: Path | None, cache_dir: Path, refresh_seeds: bool, o
 
     seed_store = SeedStore(config, cache_dir)
     seeds = await seed_store.load(refresh=refresh_seeds)
+    stats.seeds_loaded = len(seeds)
     LOGGER.info("seed urls loaded", extra={"qc_seed_count": len(seeds)})
+
+    user_agents = await UserAgentStore(config, cache_dir).load(refresh=refresh_seeds)
+    config.user_agents = user_agents
+    stats.user_agents_loaded = len(user_agents)
+    LOGGER.info("user agents loaded", extra={"qc_user_agent_count": len(user_agents)})
 
     health_server = None
     if config.health.enabled and not once:

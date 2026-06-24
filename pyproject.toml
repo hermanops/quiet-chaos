@@ -39,6 +39,7 @@ dev = [
   "pytest-asyncio>=0.24.0",
   "respx>=0.21.1",
   "ruff>=0.6.8",
+  "semgrep>=1.163.0",
 ]
 
 [project.scripts]

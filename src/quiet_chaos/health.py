@@ -13,6 +13,8 @@ class RuntimeStats:
     requests_succeeded: int = 0
     requests_failed: int = 0
     dns_lookups: int = 0
+    seeds_loaded: int = 0
+    user_agents_loaded: int = 0
     last_error: str | None = None
     last_url: str | None = None
 

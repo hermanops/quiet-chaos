@@ -1,6 +1,10 @@
+name: quiet-chaos
+
 services:
   quiet-chaos:
-    build: .
+    build:
+      context: ..
+      dockerfile: Dockerfile
     image: quiet-chaos:local
     restart: unless-stopped
     command:
@@ -20,6 +24,7 @@ services:
         max-size: "10m"
         max-file: "3"
     volumes:
+      - /opt/quiet-chaos/config.toml:/app/config.toml:ro
       - quiet-chaos-cache:/home/nonroot/.cache/quiet-chaos
 
 volumes:

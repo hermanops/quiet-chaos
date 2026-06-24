@@ -21,4 +21,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080', timeout=3).read()"
 
 ENTRYPOINT ["quiet-chaos"]
-CMD ["run", "--config", "/app/config.toml"]
+CMD ["run", "--config", "/app/config.toml", "--cache-dir", "/home/nonroot/.cache/quiet-chaos"]

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import csv
+import gzip
+import hashlib
 import io
 import random
 import zipfile
@@ -52,7 +54,7 @@ class SeedStore:
     async def _load_source(
         self, client: httpx.AsyncClient, source: SeedSource, refresh: bool
     ) -> list[str]:
-        cache_file = self._cache_dir / f"{source.kind}-{abs(hash(str(source.url)))}.cache"
+        cache_file = self._cache_dir / f"{source.kind}-{self._cache_key(str(source.url))}.cache"
         self._cache_dir.mkdir(parents=True, exist_ok=True)
         if not refresh and self._is_fresh(cache_file, source.refresh_hours):
             return cache_file.read_text(encoding="utf-8").splitlines()[: source.limit]
@@ -61,6 +63,8 @@ class SeedStore:
         response.raise_for_status()
         if source.kind == "tranco_zip":
             domains = self._parse_tranco_zip(response.content, source.limit)
+        elif source.kind == "crux_gzip_csv":
+            domains = self._parse_crux_gzip_csv(response.content, source.limit)
         else:
             domains = self._parse_text_domains(response.text, source.limit)
         cache_file.write_text("\n".join(domains), encoding="utf-8")
@@ -87,6 +91,21 @@ class SeedStore:
         return domains
 
     @staticmethod
+    def _parse_crux_gzip_csv(content: bytes, limit: int) -> list[str]:
+        rows = gzip.decompress(content).decode("utf-8", errors="replace").splitlines()
+        domains: list[str] = []
+        for row in csv.DictReader(rows):
+            origin = (row.get("origin") or "").strip()
+            if not origin:
+                continue
+            domains.append(
+                origin if origin.startswith(("http://", "https://")) else f"https://{origin}/"
+            )
+            if len(domains) >= limit:
+                break
+        return domains
+
+    @staticmethod
     def _parse_text_domains(text: str, limit: int) -> list[str]:
         domains: list[str] = []
         for line in text.splitlines():
@@ -107,3 +126,7 @@ class SeedStore:
         scheme = parsed.scheme if parsed.scheme in {"http", "https"} else "https"
         path = parsed.path or "/"
         return f"{scheme}://{parsed.hostname}{path}"
+
+    @staticmethod
+    def _cache_key(value: str) -> str:
+        return hashlib.sha256(value.encode("utf-8")).hexdigest()[:16]

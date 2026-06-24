@@ -11,6 +11,11 @@ def test_default_config_is_bounded() -> None:
 
     assert config.max_requests_per_second == 1.0
     assert config.per_domain_cooldown_seconds == 30.0
+    assert config.user_agent_source.enabled is False
+    assert config.visited_url_cache_size == 5_000
+    assert config.pacing.enabled is True
+    assert config.stats_log.interval_seconds == 300
+    assert config.max_request_retries == 1
     assert TrafficMode.DNS in config.modes
 
 
