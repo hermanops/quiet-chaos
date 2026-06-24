@@ -1,0 +1,54 @@
+log_level = "info"
+json_logs = true
+request_timeout_seconds = 8.0
+max_links_per_page = 30
+visited_url_cache_size = 5000
+failure_cooldown_threshold = 3
+failure_cooldown_seconds = 300.0
+failure_cache_size = 1000
+max_request_retries = 1
+retry_backoff_seconds = 1.0
+seed_reinjection_probability = 0.1
+modes = ["http", "dns", "rss", "search", "assets"]
+
+# deny_domains and seed_urls are left unset to inherit the built-in defaults
+# (full RFC1918 deny coverage, a broader 10-url seed list) rather than the
+# narrower lists in examples/config.toml.
+
+[[seed_sources]]
+kind = "tranco_zip"
+url = "https://tranco-list.eu/top-1m.csv.zip"
+limit = 500
+refresh_hours = 24
+
+[[seed_sources]]
+kind = "crux_gzip_csv"
+url = "https://raw.githubusercontent.com/zakird/crux-top-lists/main/data/global/current.csv.gz"
+limit = 500
+refresh_hours = 24
+
+[user_agent_source]
+enabled = false
+
+[pacing]
+enabled = true
+idle_min_seconds = 0.25
+idle_max_seconds = 2.0
+long_pause_probability = 0.02
+long_pause_min_seconds = 60.0
+long_pause_max_seconds = 300.0
+max_pause_seconds = 300.0
+diurnal_enabled = true
+
+[stats_log]
+enabled = true
+interval_seconds = 300
+
+[health]
+enabled = true
+host = "0.0.0.0"
+port = 8080
+
+[telemetry]
+enabled = false
+service_name = "quiet-chaos-srv"
