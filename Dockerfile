@@ -1,22 +1,21 @@
 # syntax=docker/dockerfile:1.7
-FROM python:3.12-slim AS runtime
+FROM cgr.dev/chainguard/python:latest-dev AS runtime
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1
+  PIP_NO_CACHE_DIR=1 \
+  PATH="/home/nonroot/.local/bin:${PATH}"
 
 WORKDIR /app
 
-RUN addgroup --system quiet-chaos && adduser --system --ingroup quiet-chaos quiet-chaos
+COPY --chown=nonroot:nonroot pyproject.toml README.md /app/
+COPY --chown=nonroot:nonroot src /app/src
+RUN python -m pip install --user .
 
-COPY pyproject.toml README.md /app/
-COPY src /app/src
-RUN pip install .
+COPY --chown=nonroot:nonroot examples/config.toml /app/config.toml
+RUN mkdir -p /home/nonroot/.cache/quiet-chaos
 
-COPY examples/config.toml /app/config.toml
-RUN mkdir -p /app/.cache/quiet-chaos && chown -R quiet-chaos:quiet-chaos /app
-
-USER quiet-chaos
+USER nonroot
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080', timeout=3).read()"

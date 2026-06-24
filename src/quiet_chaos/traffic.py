@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import random
-from contextlib import suppress
 from urllib.parse import quote_plus, urljoin, urlparse
 
 import dns.resolver
@@ -170,7 +169,3 @@ class TrafficGenerator:
                     assets.append(absolute)
         random.shuffle(assets)
         return assets
-
-    async def close(self) -> None:
-        with suppress(Exception):
-            return None
