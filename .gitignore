@@ -1,3 +1,4 @@
+uv.lock
 .cache/
 .coverage
 .pytest_cache/
