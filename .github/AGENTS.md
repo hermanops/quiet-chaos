@@ -27,6 +27,8 @@ quiet-chaos run --config examples/config.toml --once
 
 **Always run `ruff check .` and `pytest` after any code change.**
 
+> **IMPORTANT**: Never run `uv run pytest` or any `uv run …` command. This repo does not use uv as its runner; doing so regenerates a `uv.lock` that is not tracked and must then be deleted. Use plain `pytest` after installing the dev extras.
+
 ---
 
 ## Architecture
@@ -88,7 +90,10 @@ Container runs as **nonroot**; cache volume mounts at `/home/nonroot/.cache/quie
 
 - **Rate limit is strict**: `max_requests_per_second > 0` and `≤ 1.0` — Pydantic will reject anything higher
 - **Pacing adds on top of rate limiting** — setting both may produce very low effective throughput
+- **Pacing must respect the deadline**: any sleep in `pacing.py` or `traffic.py` must be capped to `min(pause, remaining_seconds)`; uncapped sleeps cause runs to exceed `run_for_seconds`
 - **Failure cooldown is per-domain** keyed on `urlparse().hostname` — not per-URL
 - **Retry only covers transient errors** (`ConnectError`, `TimeoutException`, `TransportError`) — HTTP 4xx/5xx never retry
 - **SHA-256 cache keys** in `seed_sources.py` — do not switch back to Python's `hash()` (not stable across processes)
 - **Health server** is raw HTTP/1.1 (no framework) — `health.py` is intentionally simple
+- **Docker host Compose template** (`examples/docker-compose.host.yml`) must include a `build:` section pointing to the repo root; without it, `docker compose … up` fails silently on a fresh host that doesn't have the image cached
+- **`uv run pytest`** regenerates `uv.lock` (not tracked) — see Quick Commands above
