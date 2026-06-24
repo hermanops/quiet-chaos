@@ -1,0 +1,13 @@
+services:
+  quiet-chaos:
+    build: .
+    image: quiet-chaos:local
+    restart: unless-stopped
+    command: ["run", "--config", "/app/config.toml"]
+    ports:
+      - "8080:8080"
+    volumes:
+      - quiet-chaos-cache:/app/.cache/quiet-chaos
+
+volumes:
+  quiet-chaos-cache:

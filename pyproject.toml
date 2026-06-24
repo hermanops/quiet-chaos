@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "quiet-chaos"
+version = "0.1.0"
+description = "A bounded, observable HTTP/DNS traffic noise generator for personal privacy experiments."
+readme = "README.md"
+requires-python = ">=3.12"
+license = "GPL-3.0-only"
+authors = [{ name = "hermanops" }]
+keywords = ["privacy", "traffic", "dns", "docker", "observability"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Internet :: WWW/HTTP",
+]
+dependencies = [
+  "beautifulsoup4>=4.12.3",
+  "dnspython>=2.6.1",
+  "feedparser>=6.0.11",
+  "httpx[http2]>=0.27.2",
+  "pydantic>=2.8.2",
+  "typer>=0.12.5",
+]
+
+[project.optional-dependencies]
+otel = [
+  "opentelemetry-api>=1.27.0",
+  "opentelemetry-exporter-otlp>=1.27.0",
+  "opentelemetry-sdk>=1.27.0",
+]
+dev = [
+  "pytest>=8.3.2",
+  "pytest-asyncio>=0.24.0",
+  "respx>=0.21.1",
+  "ruff>=0.6.8",
+]
+
+[project.scripts]
+quiet-chaos = "quiet_chaos.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/quiet_chaos"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

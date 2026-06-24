@@ -1,0 +1,44 @@
+log_level = "info"
+json_logs = true
+run_for_seconds = 3600
+max_requests_per_second = 1.0
+per_domain_cooldown_seconds = 30.0
+request_timeout_seconds = 8.0
+max_links_per_page = 30
+modes = ["http", "dns", "rss", "search", "assets"]
+
+seed_urls = [
+  "https://www.wikipedia.org/",
+  "https://www.bbc.com/",
+  "https://www.mozilla.org/",
+]
+
+deny_domains = [
+  "localhost",
+  "127.0.0.1",
+  "10.",
+  "172.16.",
+  "192.168.",
+]
+
+search_queries = [
+  "open source software",
+  "public libraries",
+  "space telescope images",
+  "renewable energy storage",
+]
+
+[[seed_sources]]
+kind = "tranco_zip"
+url = "https://tranco-list.eu/top-1m.csv.zip"
+limit = 500
+refresh_hours = 24
+
+[health]
+enabled = true
+host = "0.0.0.0"
+port = 8080
+
+[telemetry]
+enabled = false
+service_name = "quiet-chaos"
