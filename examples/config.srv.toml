@@ -14,8 +14,9 @@ retry_backoff_seconds = 1.0
 seed_reinjection_probability = 0.1
 modes = ["http", "dns", "rss", "search", "assets"]
 
-# deny_domains and seed_urls are left unset to inherit the built-in defaults
-# (RFC1918 deny prefixes and a broader 10-url seed list).
+# deny_domains, seed_urls and search_queries inherit the built-in defaults.
+# Seeds and queries include science, current-event and AI topics.
+# Rebuilding with updated source picks up new defaults unless overridden here.
 # Non-public IP addresses are blocked independently of the deny list.
 
 [[seed_sources]]

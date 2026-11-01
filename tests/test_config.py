@@ -42,3 +42,17 @@ def test_example_configs_inherit_safe_defaults() -> None:
         assert config.run_for_seconds == duration
         assert config.max_response_bytes == 1_000_000
         assert not SafetyPolicy(config.deny_domains).is_allowed_url("http://172.17.0.1/")
+
+
+def test_server_profile_inherits_example_topics() -> None:
+    from quiet_chaos.defaults import DEFAULT_SEARCH_QUERIES, DEFAULT_SEED_URLS
+
+    root = Path(__file__).resolve().parents[1]
+    example = load_config(root / "examples" / "config.toml")
+    server = load_config(root / "examples" / "config.srv.toml")
+
+    assert {str(url) for url in example.seed_urls} <= {str(url) for url in server.seed_urls}
+    assert {str(url) for url in server.seed_urls} == set(DEFAULT_SEED_URLS)
+    assert set(example.search_queries) <= set(server.search_queries or DEFAULT_SEARCH_QUERIES)
+    assert server.run_for_seconds is None
+    assert server.pacing.diurnal_enabled is True

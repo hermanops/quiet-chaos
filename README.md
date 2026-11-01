@@ -119,6 +119,11 @@ Dockhand configured to track `main` and build locally using
 [docker-compose.host.yml](docker-compose.host.yml). No packages or images are
 published to PyPI or GHCR.
 
+The host profile leaves `seed_urls` and `search_queries` unset so it inherits
+the built-in topics, including the science and AI topics in the general example.
+Rebuild and redeploy in Dockhand to pick up updated defaults. Explicit lists in
+`/opt/quiet-chaos/config.toml` override those defaults and must be updated separately.
+
 To release a version:
 
 1. Update `[project].version` in [pyproject.toml](pyproject.toml) and merge the
