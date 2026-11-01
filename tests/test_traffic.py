@@ -65,6 +65,88 @@ def test_choose_url_can_reinject_root_seed() -> None:
     assert generator._choose_url() == "https://seed.example/"
 
 
+@pytest.mark.parametrize("missing_status", [404, 410])
+async def test_rss_poll_reaches_last_path_after_missing_feeds(missing_status: int) -> None:
+    generator = make_generator(AppConfig(seed_sources=[], seed_urls=["https://example.com/"]))
+    generator._seeds._urls = ["https://example.com/"]
+    paths = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        if request.url.path == "/atom.xml":
+            return httpx.Response(
+                200,
+                text='<feed xmlns="http://www.w3.org/2005/Atom"><entry>'
+                "<title>News</title><id>urn:news:1</id></entry></feed>",
+            )
+        return httpx.Response(missing_status)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await generator._rss_poll(client)
+
+    assert paths == ["/feed", "/rss", "/rss.xml", "/atom.xml"]
+    assert not generator._failures.is_blocked("https://example.com/")
+    assert generator._stats.requests_attempted == 4
+    assert generator._stats.requests_failed == 3
+    assert generator._stats.requests_succeeded == 1
+
+
+async def test_rss_missing_paths_stay_cached_after_other_request_succeeds() -> None:
+    generator = make_generator(AppConfig(seed_sources=[], seed_urls=["https://example.com/"]))
+    generator._seeds._urls = ["https://example.com/"]
+    paths = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        return httpx.Response(200 if request.url.path == "/" else 404)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        await generator._rss_poll(client)
+        await generator._safe_request(client, "GET", "https://example.com/")
+        await generator._rss_poll(client)
+
+    assert paths == ["/feed", "/rss", "/rss.xml", "/atom.xml", "/"]
+    assert generator._stats.requests_failed == 4
+    assert not generator._failures.is_blocked("https://example.com/")
+
+
+@pytest.mark.parametrize("status", [403, 429, 500])
+async def test_rss_poll_preserves_real_failure_cooldown(status: int) -> None:
+    generator = make_generator(
+        AppConfig(seed_sources=[], seed_urls=["https://example.com/"], failure_cooldown_threshold=1)
+    )
+    generator._seeds._urls = ["https://example.com/"]
+    paths = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        return httpx.Response(status)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await generator._rss_poll(client)
+        assert await generator._safe_request(client, "GET", "https://example.com/") is None
+
+    assert paths == ["/feed"]
+    assert generator._failures.is_blocked("https://example.com/")
+
+
+async def test_non_rss_missing_response_still_fails_without_retry() -> None:
+    generator = make_generator(AppConfig(seed_sources=[], failure_cooldown_threshold=1))
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(404)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(httpx.HTTPStatusError):
+            await generator._safe_request(client, "GET", "https://example.com/feed")
+
+    assert len(calls) == 1
+    assert generator._failures.is_blocked("https://example.com/")
+
+
 async def test_safe_request_retries_transient_failure() -> None:
     config = AppConfig(
         seed_sources=[],

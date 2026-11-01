@@ -114,7 +114,7 @@ class TrafficGenerator:
         root = self._choose_url()
         for path in ("/feed", "/rss", "/rss.xml", "/atom.xml"):
             candidate = urljoin(root, path)
-            response = await self._safe_request(client, "GET", candidate)
+            response = await self._safe_request(client, "GET", candidate, allow_missing=True)
             if response is None:
                 continue
             parsed = feedparser.parse(response.text)
@@ -141,7 +141,7 @@ class TrafficGenerator:
             await self._safe_request(client, "HEAD", random.choice(assets))
 
     async def _safe_request(
-        self, client: httpx.AsyncClient, method: str, url: str
+        self, client: httpx.AsyncClient, method: str, url: str, *, allow_missing: bool = False
     ) -> httpx.Response | None:
         if method not in {"GET", "HEAD"} or not self._safety.is_allowed_url(url):
             return None
@@ -157,6 +157,17 @@ class TrafficGenerator:
         LOGGER.info("request", extra={"qc_method": method, "qc_url": url})
         try:
             response = await self._request_with_retries(client, method, url, headers)
+        except httpx.HTTPStatusError as error:
+            if allow_missing and error.response.status_code in {404, 410}:
+                self._stats.requests_failed += 1
+                self._visited.add(url)
+                LOGGER.debug(
+                    "feed path missing",
+                    extra={"qc_url": url, "qc_status": error.response.status_code},
+                )
+                return None
+            self._failures.record_failure(url)
+            raise
         except httpx.HTTPError:
             self._failures.record_failure(url)
             raise
