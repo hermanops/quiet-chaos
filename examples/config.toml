@@ -19,16 +19,45 @@ seed_urls = [
   "https://www.wikipedia.org/",
   "https://www.bbc.com/",
   "https://www.mozilla.org/",
+  "https://www.nasa.gov/",
+  "https://www.britannica.com/",
+  "https://www.si.edu/",
+  "https://www.python.org/",
+  "https://www.theguardian.com/",
+  "https://huggingface.co/",
+  "https://openai.com/",
+  "https://www.anthropic.com/",
+  "https://deepmind.google/",
 ]
 
 # Omit deny_domains to inherit the built-in list. An explicit list replaces it.
 # Non-public IP addresses are blocked independently of the deny list.
 
+# Search mode uses Wikipedia OpenSearch, not a general web search engine.
+# Prefer short article topics; mix evergreen interests with recent events.
+# Recent topics checked 2026-11-01; this list does not refresh automatically.
+# Sources: https://www.nobelprize.org/all-nobel-prizes-2026/
+#          https://www.python.org/downloads/release/python-3150/
 search_queries = [
-  "open source software",
-  "public libraries",
-  "space telescope images",
-  "renewable energy storage",
+  "Open-source software",
+  "Public library",
+  "James Webb Space Telescope",
+  "Grid energy storage",
+  "IceCube Neutrino Observatory",
+  "Francis Halzen",
+  "Neutrino astronomy",
+  "Optogenetics",
+  "Karl Deisseroth",
+  "Asymmetric synthesis",
+  "Soai reaction",
+  "Anne Carson",
+  "Python (programming language)",
+  "Generative artificial intelligence",
+  "Large language model",
+  "Retrieval-augmented generation",
+  "Multimodal learning",
+  "AI safety",
+  "ChatGPT",
 ]
 
 [[seed_sources]]
