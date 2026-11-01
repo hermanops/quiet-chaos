@@ -99,6 +99,47 @@ semgrep scan --config p/python --config p/security-audit .
 pytest
 ```
 
+## Releases
+
+GitHub Releases mark checked source versions; they do not change deployment. Keep
+Dockhand configured to track `main` and build locally using
+[docker-compose.host.yml](docker-compose.host.yml). No packages or images are
+published to PyPI or GHCR.
+
+To release a version:
+
+1. Update `[project].version` in [pyproject.toml](pyproject.toml) and merge the
+	change into `main` through the usual review and CI checks.
+2. Update your local `main` and run the checks:
+
+	```bash
+	git switch main
+	git pull --ff-only origin main
+	ruff check .
+	ruff format --check .
+	pytest
+	```
+
+3. Create and push an annotated tag matching the version exactly, prefixed with
+	`v`. For the current `0.1.0` version:
+
+	```bash
+	git tag -a v0.1.0 -m "Release v0.1.0"
+	git push origin v0.1.0
+	```
+
+Pushing a `v*` tag runs version validation, Ruff lint and format checks, pytest on
+Python 3.12-3.14, and a Docker build without publishing the image. The tag must
+equal `v` plus the version in the tagged commit's [pyproject.toml](pyproject.toml).
+Only after all checks succeed does CI create a GitHub Release with generated
+release notes and GitHub's source archives; no wheel, sdist, or container image
+is uploaded. Review the generated notes on GitHub after creation.
+
+If checks fail, no release is created. Fix code failures on `main` and use a new
+version and tag; do not move an existing release tag. For a transient CI failure,
+rerun the failed jobs on the existing tag. If the release already exists, do not
+rerun its creation job; edit its notes on GitHub instead.
+
 ## License
 
 GPL-3.0-only. See [LICENSE](LICENSE).
