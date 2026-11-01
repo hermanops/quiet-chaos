@@ -11,6 +11,7 @@ import httpx
 
 from quiet_chaos.config import AppConfig, UserAgentSourceConfig
 from quiet_chaos.defaults import DEFAULT_USER_AGENTS
+from quiet_chaos.safety import SafetyPolicy, SafetyTransport
 
 
 class UserAgentStore:
@@ -22,7 +23,12 @@ class UserAgentStore:
         agents = [str(agent) for agent in self._config.user_agents]
         source = self._config.user_agent_source
         if source.enabled:
-            async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+            async with httpx.AsyncClient(
+                follow_redirects=True,
+                transport=SafetyTransport(SafetyPolicy(self._config.deny_domains)),
+                trust_env=False,
+                timeout=30,
+            ) as client:
                 agents.extend(await self._load_source(client, source, refresh))
 
         unique = list(dict.fromkeys(agent for agent in agents if agent.strip()))

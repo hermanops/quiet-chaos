@@ -1,7 +1,10 @@
 log_level = "info"
 json_logs = true
+# Stop after one hour; omit this setting for continuous operation.
 run_for_seconds = 3600
 request_timeout_seconds = 8.0
+# Limit HTML inspected for links/assets, not bytes downloaded over the network.
+max_response_bytes = 1000000
 max_links_per_page = 30
 visited_url_cache_size = 5000
 failure_cooldown_threshold = 3
@@ -18,13 +21,8 @@ seed_urls = [
   "https://www.mozilla.org/",
 ]
 
-deny_domains = [
-  "localhost",
-  "127.0.0.1",
-  "10.",
-  "172.16.",
-  "192.168.",
-]
+# Omit deny_domains to inherit the built-in list. An explicit list replaces it.
+# Non-public IP addresses are blocked independently of the deny list.
 
 search_queries = [
   "open source software",
@@ -67,6 +65,8 @@ interval_seconds = 300
 
 [health]
 enabled = true
+# Bind inside Docker; Compose publishes this on host localhost only.
+# For direct local execution, use "127.0.0.1" instead.
 host = "0.0.0.0"
 port = 8080
 

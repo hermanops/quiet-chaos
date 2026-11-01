@@ -14,7 +14,7 @@ import httpx
 
 from quiet_chaos.config import AppConfig, SeedSource
 from quiet_chaos.defaults import DEFAULT_SEED_URLS
-from quiet_chaos.safety import SafetyPolicy
+from quiet_chaos.safety import SafetyPolicy, SafetyTransport
 
 
 class SeedStore:
@@ -30,7 +30,12 @@ class SeedStore:
 
     async def load(self, refresh: bool = False) -> list[str]:
         urls = [str(url) for url in self._config.seed_urls]
-        async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
+        async with httpx.AsyncClient(
+            follow_redirects=True,
+            transport=SafetyTransport(self._safety),
+            trust_env=False,
+            timeout=30,
+        ) as client:
             for source in self._config.seed_sources:
                 urls.extend(await self._load_source(client, source, refresh))
 

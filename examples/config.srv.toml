@@ -1,6 +1,9 @@
 log_level = "info"
 json_logs = true
+# run_for_seconds is omitted for continuous operation.
 request_timeout_seconds = 8.0
+# Limit HTML inspected for links/assets, not the HTTP download size.
+max_response_bytes = 1000000
 max_links_per_page = 30
 visited_url_cache_size = 5000
 failure_cooldown_threshold = 3
@@ -12,8 +15,8 @@ seed_reinjection_probability = 0.1
 modes = ["http", "dns", "rss", "search", "assets"]
 
 # deny_domains and seed_urls are left unset to inherit the built-in defaults
-# (full RFC1918 deny coverage, a broader 10-url seed list) rather than the
-# narrower lists in examples/config.toml.
+# (RFC1918 deny prefixes and a broader 10-url seed list).
+# Non-public IP addresses are blocked independently of the deny list.
 
 [[seed_sources]]
 kind = "tranco_zip"
@@ -38,6 +41,8 @@ long_pause_probability = 0.02
 long_pause_min_seconds = 60.0
 long_pause_max_seconds = 300.0
 max_pause_seconds = 300.0
+# Uses the container's local timezone, which may differ from the host's.
+# Verify the container timezone before relying on the day/night schedule.
 diurnal_enabled = true
 
 [stats_log]
@@ -46,6 +51,7 @@ interval_seconds = 300
 
 [health]
 enabled = true
+# Bind inside Docker; the host Compose file publishes on localhost only.
 host = "0.0.0.0"
 port = 8080
 

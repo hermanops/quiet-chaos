@@ -17,7 +17,7 @@ from quiet_chaos.defaults import DEFAULT_SEARCH_QUERIES
 from quiet_chaos.fingerprints import browser_headers
 from quiet_chaos.health import RuntimeStats
 from quiet_chaos.pacing import next_pause_seconds
-from quiet_chaos.safety import SafetyPolicy
+from quiet_chaos.safety import SafetyPolicy, SafetyTransport
 from quiet_chaos.seed_sources import SeedStore
 from quiet_chaos.telemetry import Telemetry
 
@@ -56,6 +56,8 @@ class TrafficGenerator:
             stats_task = asyncio.create_task(self._log_stats_forever())
         async with httpx.AsyncClient(
             follow_redirects=True,
+            transport=SafetyTransport(self._safety),
+            trust_env=False,
             timeout=self._config.request_timeout_seconds,
             headers={
                 "accept": "text/html,application/xhtml+xml,application/rss+xml;q=0.9,*/*;q=0.8"
@@ -187,7 +189,7 @@ class TrafficGenerator:
                 response = await client.request(method, url, headers=headers)
                 response.raise_for_status()
                 return response
-            except httpx.HTTPStatusError:
+            except (httpx.HTTPStatusError, httpx.UnsupportedProtocol):
                 raise
             except (httpx.TimeoutException, httpx.TransportError):
                 if attempt >= self._config.max_request_retries:

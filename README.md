@@ -89,6 +89,19 @@ Important defaults:
 
 Quiet Chaos is designed for low-volume, benign background traffic. It does not try to bypass access controls, automate accounts, submit forms, exploit endpoints, or overwhelm services. Keep request rates conservative and follow the acceptable-use rules for the networks and services you run it against.
 
+HTTP traffic, seed downloads, and user-agent downloads reject non-public IPv4
+and IPv6 destinations, including redirects. Hostnames must resolve entirely to
+public addresses; connections use a checked IP while preserving the original
+Host header and TLS hostname to prevent DNS rebinding. Environment HTTP proxies
+are not used, since they would bypass these destination checks. Telemetry export
+is separately configured and is not subject to this HTTP traffic policy.
+
+The host profile's diurnal pacing follows the container's local timezone, not
+necessarily the Docker host's. Verify the image's timezone before relying on the
+schedule. For direct local execution, bind the health endpoint to `127.0.0.1`;
+the example's `0.0.0.0` binding is intended for Docker with localhost-only port
+publishing.
+
 ## Development
 
 ```bash

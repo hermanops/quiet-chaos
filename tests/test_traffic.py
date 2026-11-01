@@ -1,8 +1,12 @@
+import asyncio
+import socket
+
 import httpx
 import pytest
 
 from quiet_chaos.config import AppConfig
 from quiet_chaos.health import RuntimeStats
+from quiet_chaos.safety import SafetyTransport
 from quiet_chaos.seed_sources import SeedStore
 from quiet_chaos.telemetry import Telemetry
 from quiet_chaos.traffic import TrafficGenerator
@@ -108,3 +112,24 @@ async def test_pacing_pause_respects_deadline(monkeypatch: pytest.MonkeyPatch) -
 
     assert len(sleeps) == 1
     assert 0 < sleeps[0] <= 0.25
+
+
+async def test_safe_request_does_not_retry_blocked_dns(monkeypatch: pytest.MonkeyPatch) -> None:
+    generator = make_generator()
+    resolutions = []
+    calls = []
+
+    async def resolve(*args, **kwargs):
+        resolutions.append(args)
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("10.0.0.1", 443))]
+
+    monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", resolve)
+    transport = SafetyTransport(
+        generator._safety, httpx.MockTransport(lambda request: calls.append(request))
+    )
+    async with httpx.AsyncClient(transport=transport) as client:
+        with pytest.raises(httpx.UnsupportedProtocol):
+            await generator._safe_request(client, "GET", "https://example.com/")
+    assert len(resolutions) == 1
+    assert calls == []
+    assert generator._stats.requests_succeeded == 0

@@ -10,6 +10,7 @@ import typer
 from quiet_chaos.config import load_config
 from quiet_chaos.events import configure_logging
 from quiet_chaos.health import RuntimeStats, start_health_server
+from quiet_chaos.safety import SafetyPolicy, SafetyTransport
 from quiet_chaos.seed_sources import SeedStore
 from quiet_chaos.telemetry import Telemetry
 from quiet_chaos.traffic import TrafficGenerator
@@ -88,6 +89,8 @@ async def _run(config_path: Path | None, cache_dir: Path, refresh_seeds: bool, o
 
         async with httpx.AsyncClient(
             follow_redirects=True,
+            transport=SafetyTransport(SafetyPolicy(config.deny_domains)),
+            trust_env=False,
             timeout=config.request_timeout_seconds,
         ) as client:
             await generator.run_once(client)

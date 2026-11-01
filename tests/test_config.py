@@ -29,3 +29,16 @@ seed_urls = ["https://example.com/"]
 
     assert config.log_level == "debug"
     assert config.modes == [TrafficMode.HTTP, TrafficMode.DNS]
+
+
+def test_example_configs_inherit_safe_defaults() -> None:
+    from quiet_chaos.defaults import DEFAULT_DENY_DOMAINS
+    from quiet_chaos.safety import SafetyPolicy
+
+    root = Path(__file__).resolve().parents[1]
+    for name, duration in [("config.toml", 3600), ("config.srv.toml", None)]:
+        config = load_config(root / "examples" / name)
+        assert config.deny_domains == DEFAULT_DENY_DOMAINS
+        assert config.run_for_seconds == duration
+        assert config.max_response_bytes == 1_000_000
+        assert not SafetyPolicy(config.deny_domains).is_allowed_url("http://172.17.0.1/")
