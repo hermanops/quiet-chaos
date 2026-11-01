@@ -10,7 +10,7 @@ services:
     command:
       ["run", "--config", "/app/config.toml", "--cache-dir", "/home/nonroot/.cache/quiet-chaos"]
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     healthcheck:
       test:
         ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080', timeout=3).read()"]

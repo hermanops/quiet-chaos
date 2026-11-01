@@ -6,7 +6,7 @@ The default configuration keeps traffic deliberately modest: bounded pacing betw
 
 ## Features
 
-- Python 3.12 async runtime using `httpx`.
+- Python 3.12+ async runtime using `httpx`.
 - Traffic modes for HTTP browsing, DNS lookups, RSS polling, search-like Wikipedia API queries, and static asset HEAD requests.
 - Automatic public seed-list refresh from Tranco with a local cache and built-in fallback seeds.
 - Optional cached refresh of real browser user-agent strings.
@@ -29,6 +29,8 @@ Check health:
 ```bash
 curl http://localhost:8080
 ```
+
+Compose binds the health endpoint to localhost by default. Put it behind an authenticated reverse proxy or explicitly change the port binding if remote access is required.
 
 The container runs as `nonroot`, reads `/app/config.toml`, and stores refreshed seed and user-agent caches in the `quiet-chaos-cache` volume mounted at `/home/nonroot/.cache/quiet-chaos`.
 
