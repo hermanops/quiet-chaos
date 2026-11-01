@@ -1,10 +1,9 @@
 # syntax=docker/dockerfile:1.7
-FROM cgr.dev/chainguard/python:latest-dev AS runtime
+FROM cgr.dev/chainguard/python:latest-dev AS build
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-  PIP_NO_CACHE_DIR=1 \
-  PATH="/home/nonroot/.local/bin:${PATH}"
+    PIP_NO_CACHE_DIR=1
 
 WORKDIR /app
 
@@ -12,8 +11,16 @@ COPY --chown=nonroot:nonroot pyproject.toml README.md /app/
 COPY --chown=nonroot:nonroot src /app/src
 RUN python -m pip install --user .
 
+FROM cgr.dev/chainguard/python:latest
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/home/nonroot/.local/bin:${PATH}"
+
+WORKDIR /app
+
+COPY --from=build --chown=nonroot:nonroot /home/nonroot/.local /home/nonroot/.local
 COPY --chown=nonroot:nonroot examples/config.toml /app/config.toml
-RUN mkdir -p /home/nonroot/.cache/quiet-chaos
 
 USER nonroot
 EXPOSE 8080
