@@ -134,11 +134,11 @@ To release a version:
 	```
 
 3. Create and push an annotated tag matching the version exactly, prefixed with
-	`v`. For the current `0.1.0` version:
+	`v`. For the current `0.1.1` version:
 
 	```bash
-	git tag -a v0.1.0 -m "Release v0.1.0"
-	git push origin v0.1.0
+	git tag -a v0.1.1 -m "Release v0.1.1"
+	git push origin v0.1.1
 	```
 
 Pushing a `v*` tag runs version validation, Ruff lint and format checks, pytest on
