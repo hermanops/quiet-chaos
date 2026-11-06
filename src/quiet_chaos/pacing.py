@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import math
 import random
-from datetime import datetime
+from datetime import UTC, datetime
+from zoneinfo import ZoneInfo
 
 from quiet_chaos.config import PacingConfig
 
@@ -26,7 +27,13 @@ def next_pause_seconds(
         pause = rng.uniform(config.idle_min_seconds, config.idle_max_seconds)
 
     if config.diurnal_enabled:
-        current = now or datetime.now().astimezone()
+        if config.timezone is None:
+            current = now or datetime.now().astimezone()
+        else:
+            current = now or datetime.now(UTC)
+            if current.utcoffset() is None:
+                raise ValueError("An aware datetime is required with pacing.timezone")
+            current = current.astimezone(ZoneInfo(config.timezone))
         hour = current.hour + current.minute / 60
         pause *= 1 / diurnal_weight(hour)
     return min(pause, config.max_pause_seconds)

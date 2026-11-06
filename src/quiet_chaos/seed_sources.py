@@ -37,6 +37,7 @@ class SeedStore:
         urls = [str(url) for url in self._config.seed_urls]
         async with httpx.AsyncClient(
             follow_redirects=True,
+            headers={"accept-encoding": "gzip, deflate"},
             transport=SafetyTransport(self._safety),
             trust_env=False,
             timeout=30,

@@ -15,8 +15,8 @@ python -m pip install -e '.[dev]'
 ruff check .
 ruff format --check .
 
-# Security scan (no findings expected)
-semgrep scan --config p/python --config p/security-audit --quiet .
+# Security scan (required in CI; findings fail)
+semgrep scan --config p/python --config p/security-audit --error --strict --metrics off --quiet .
 
 # Tests
 pytest
@@ -48,6 +48,12 @@ quiet-chaos run --config examples/config.toml --once
 | `telemetry.py` | Optional OpenTelemetry / OTLP; `NullSpan` when disabled |
 | `events.py` | `JsonFormatter`; all log attributes prefixed `qc_` |
 | `defaults.py` | `DEFAULT_USER_AGENTS`, `DEFAULT_SEED_URLS`, `DEFAULT_DENY_DOMAINS` |
+
+HTTP traffic and source downloads use `SafetyTransport` for checked, pinned public
+destinations. DNS mode intentionally uses the system resolver with bounded lifetime,
+URL policy checks and public A-answer validation; it does not connect to answers.
+Main HTTP bodies are streamed with bounded wire/decoded sizes and decompression;
+redirect bodies are closed unread. Health probes and telemetry are separate paths.
 
 ---
 
@@ -92,6 +98,9 @@ Container runs as **nonroot**; cache volume mounts at `/home/nonroot/.cache/quie
 - **Retry only covers transient errors** (`ConnectError`, `TimeoutException`, `TransportError`) — HTTP 4xx/5xx never retry
 - **SHA-256 cache keys** in `seed_sources.py` — do not switch back to Python's `hash()` (not stable across processes)
 - **Health server** is raw HTTP/1.1 (no framework) — `health.py` is intentionally simple
+- **Health access** defaults to loopback; container configs explicitly bind wildcard. Keep optional `QUIET_CHAOS_HEALTH_TOKEN` authentication and Docker/Compose probes aligned; health errors expose class names only.
+- **Diurnal timezone** is runtime-local unless `pacing.timezone` selects an IANA zone. Preserve deadline and maximum-pause caps.
+- **Security CI** gates PRs/releases with Semgrep; scheduled/manual pip-audit covers resolved runtime and telemetry dependencies separately from dev tools.
 - **Docker host Compose template** (`docker-compose.host.yml`) lives at the repo root (not under `examples/`) specifically so its `build: context: .` doesn't need to traverse out of the file's own directory — Git-based stack deployment tools (Dockhand, Portainer, etc.) commonly sandbox build context to the compose file's directory and reject `..` paths
 - **`examples/config.srv.toml` is not auto-loaded** — it's a tracked template for the `docker-compose.host.yml` bind mount at `/opt/quiet-chaos/config.toml`; nothing in the `Dockerfile` or Compose files reads it directly, so it must be copied onto the host manually before each fresh deploy
 - **`uv run pytest`** regenerates `uv.lock` (not tracked) — see Quick Commands above

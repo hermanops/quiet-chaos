@@ -57,6 +57,21 @@ jobs:
       - name: Tests
         run: pytest
 
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Install Semgrep
+        run: python -m pip install 'semgrep==1.183.0'
+      - name: Scan for security findings
+        run: >-
+          semgrep scan --config p/python --config p/security-audit
+          --error --strict --metrics off --disable-version-check --quiet .
+
   docker:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -67,7 +82,7 @@ jobs:
 
   release:
     if: startsWith(github.ref, 'refs/tags/')
-    needs: [validate-tag, test, docker]
+    needs: [validate-tag, test, security, docker]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

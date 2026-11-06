@@ -2,7 +2,7 @@ log_level = "info"
 json_logs = true
 # run_for_seconds is omitted for continuous operation.
 request_timeout_seconds = 8.0
-# Limit HTML inspected for links/assets, not the HTTP download size.
+# Reject HTTP bodies exceeding this many wire or decoded bytes; oversized bodies are not retried.
 max_response_bytes = 1000000
 max_links_per_page = 30
 visited_url_cache_size = 5000
@@ -42,8 +42,9 @@ long_pause_probability = 0.02
 long_pause_min_seconds = 60.0
 long_pause_max_seconds = 300.0
 max_pause_seconds = 300.0
-# Uses the container's local timezone, which may differ from the host's.
-# Verify the container timezone before relying on the day/night schedule.
+# Omit timezone to use the container's local timezone, which may differ from the host's.
+# Set an IANA zone explicitly for a predictable day/night schedule.
+# timezone = "Europe/Amsterdam"
 diurnal_enabled = true
 
 [stats_log]
@@ -55,7 +56,10 @@ enabled = true
 # Bind inside Docker; the host Compose file publishes on localhost only.
 host = "0.0.0.0"
 port = 8080
+allowed_hosts = []
+# Set QUIET_CHAOS_HEALTH_TOKEN in the environment; Compose also passes it to health probes.
 
 [telemetry]
 enabled = false
 service_name = "quiet-chaos-srv"
+# Requires the otel extra and an optional OTEL_EXPORTER_OTLP_ENDPOINT environment setting.

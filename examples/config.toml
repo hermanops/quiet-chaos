@@ -3,7 +3,7 @@ json_logs = true
 # Stop after one hour; omit this setting for continuous operation.
 run_for_seconds = 3600
 request_timeout_seconds = 8.0
-# Limit HTML inspected for links/assets, not bytes downloaded over the network.
+# Reject HTTP bodies exceeding this many wire or decoded bytes; oversized bodies are not retried.
 max_response_bytes = 1000000
 max_links_per_page = 30
 visited_url_cache_size = 5000
@@ -87,6 +87,8 @@ long_pause_min_seconds = 60.0
 long_pause_max_seconds = 300.0
 max_pause_seconds = 300.0
 diurnal_enabled = false
+# Optional IANA timezone; omit to keep the runtime's local timezone.
+# timezone = "Europe/Amsterdam"
 
 [stats_log]
 enabled = true
@@ -98,7 +100,11 @@ enabled = true
 # For direct local execution, use "127.0.0.1" instead.
 host = "0.0.0.0"
 port = 8080
+# Additional exact Host names accepted through an intentional reverse proxy.
+allowed_hosts = []
+# Set QUIET_CHAOS_HEALTH_TOKEN in the environment to require Authorization: Bearer <token>.
 
 [telemetry]
 enabled = false
 service_name = "quiet-chaos"
+# Install the otel extra; configure the HTTP collector with OTEL_EXPORTER_OTLP_ENDPOINT.

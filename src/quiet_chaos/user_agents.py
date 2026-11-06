@@ -3,7 +3,6 @@ from __future__ import annotations
 import hashlib
 import json
 import random
-import re
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -26,6 +25,7 @@ class UserAgentStore:
         if source.enabled:
             async with httpx.AsyncClient(
                 follow_redirects=True,
+                headers={"accept-encoding": "gzip, deflate"},
                 transport=SafetyTransport(SafetyPolicy(self._config.deny_domains)),
                 trust_env=False,
                 timeout=30,
@@ -71,12 +71,48 @@ class UserAgentStore:
 
     @staticmethod
     def _parse_useragents_me(text: str, limit: int) -> list[str]:
+        if limit <= 0:
+            return []
         agents: list[str] = []
         seen: set[str] = set()
-        for block in re.findall(r"\[\s*\{.*?\}\s*\]", text, re.DOTALL):
-            agents.extend(_extract_agents_from_json_block(block, seen, limit - len(agents)))
-            if len(agents) >= limit:
-                return agents
+        start: int | None = None
+        stack: list[str] = []
+        quoted = False
+        escaped = False
+        for index, character in enumerate(text):
+            if start is None:
+                if character == "[":
+                    start = index
+                    stack = ["]"]
+                    quoted = escaped = False
+                continue
+            if quoted:
+                if escaped:
+                    escaped = False
+                elif character == "\\":
+                    escaped = True
+                elif character == '"':
+                    quoted = False
+            elif character == '"':
+                quoted = True
+            elif character in "[{":
+                stack.append("]" if character == "[" else "}")
+                if len(stack) > 64:
+                    start = None
+                    stack.clear()
+            elif character in "]}":
+                if character != stack.pop():
+                    start = None
+                    stack.clear()
+                elif not stack:
+                    agents.extend(
+                        _extract_agents_from_json_block(
+                            text[start : index + 1], seen, limit - len(agents)
+                        )
+                    )
+                    if len(agents) >= limit:
+                        return agents
+                    start = None
         return agents
 
     @staticmethod

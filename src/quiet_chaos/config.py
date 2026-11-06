@@ -4,6 +4,7 @@ import tomllib
 from enum import StrEnum
 from pathlib import Path
 from typing import Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator, model_validator
 
@@ -27,8 +28,9 @@ class SeedSource(BaseModel):
 
 class HealthConfig(BaseModel):
     enabled: bool = True
-    host: str = "0.0.0.0"
+    host: str = "127.0.0.1"
     port: int = Field(default=8080, ge=1, le=65535)
+    allowed_hosts: list[str] = Field(default_factory=list)
 
 
 class TelemetryConfig(BaseModel):
@@ -52,6 +54,17 @@ class PacingConfig(BaseModel):
     long_pause_max_seconds: float = Field(default=300.0, ge=0, le=7_200)
     max_pause_seconds: float = Field(default=300.0, ge=0, le=7_200)
     diurnal_enabled: bool = False
+    timezone: str | None = None
+
+    @field_validator("timezone")
+    @classmethod
+    def require_known_timezone(cls, value: str | None) -> str | None:
+        if value is not None:
+            try:
+                ZoneInfo(value)
+            except (ZoneInfoNotFoundError, ValueError) as error:
+                raise ValueError(f"Unknown IANA timezone: {value!r}") from error
+        return value
 
     @model_validator(mode="after")
     def require_ordered_ranges(self) -> PacingConfig:

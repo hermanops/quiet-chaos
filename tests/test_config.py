@@ -11,6 +11,8 @@ def test_default_config_is_bounded() -> None:
     assert config.pacing.enabled is True
     assert config.stats_log.interval_seconds == 300
     assert config.max_request_retries == 1
+    assert config.health.host == "127.0.0.1"
+    assert config.health.allowed_hosts == []
     assert TrafficMode.DNS in config.modes
 
 

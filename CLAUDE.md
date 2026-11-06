@@ -14,8 +14,8 @@ python -m pip install -e '.[dev]'
 ruff check .
 ruff format --check .   # ruff format . to auto-fix
 
-# Security scan (dev-only, not run in CI)
-semgrep scan --config p/python --config p/security-audit --quiet .
+# Security scan (also gates CI)
+semgrep scan --config p/python --config p/security-audit --error --strict --metrics off --quiet .
 
 # Tests (whole suite)
 pytest
@@ -31,7 +31,7 @@ quiet-chaos run --config examples/config.toml --once
 
 > Never run `uv run pytest` or any `uv run …` command — this repo does not use uv as its runner; it would regenerate an untracked `uv.lock`. Use plain `pytest` after installing the dev extras.
 
-CI (`.github/workflows/ci.yml`) runs `ruff check`, `ruff format --check`, `pytest`, and a Docker build — but not semgrep.
+CI (`.github/workflows/ci.yml`) runs `ruff check`, `ruff format --check`, `pytest`, a Docker build and blocking Semgrep. Scheduled/manual `.github/workflows/security.yml` audits resolved runtime and telemetry dependencies with pip-audit.
 
 ## Architecture
 
@@ -40,7 +40,8 @@ Quiet Chaos is a single-process async traffic generator: `TrafficGenerator.run_f
 See `.github/AGENTS.md` for the full module-by-module architecture table. Key flow to know:
 
 - `cli.py` (Typer) → loads `config.py` (`AppConfig`, Pydantic v2, TOML-backed) → constructs `TrafficGenerator` with a `SeedStore` (`seed_sources.py`), `RuntimeStats` (`health.py`), and `Telemetry` (`telemetry.py`).
-- Every outbound request passes through `SafetyPolicy.is_allowed_url()` (`safety.py`) before it's made — this is the single safety chokepoint (deny-list, scheme, private/local IP checks). Only GET/HEAD are ever issued.
+- Traffic/source HTTP requests pass through `SafetyPolicy` and `SafetyTransport` (`safety.py`) for method, scheme and checked/pinned public destinations, including redirects. DNS mode intentionally queries the system resolver with bounded lifetime and checks URL policy and all A answers. Local health probes and optional telemetry are separate paths.
+- Main response bodies have wire and decoded byte limits with bounded gzip/deflate decoding; redirect bodies are closed unread. Oversize and safety errors never retry.
 - `LRUSet` (visited URLs) and `FailureCooldown` (per-domain, keyed on `urlparse().hostname`) in `bounded.py` keep memory bounded and steer traffic away from dead/failing domains.
 - `pacing.py` computes the inter-action sleep; `traffic.py._pause_between_actions` caps it to the remaining run deadline — any new sleep added to the request loop must respect `run_for_seconds` the same way.
 - There is no separate rate limiter — all request timing is controlled exclusively through `PacingConfig` (`pacing.py`).

@@ -170,3 +170,59 @@ async def test_transport_blocks_post_and_allows_public_literal() -> None:
     assert response.status_code == 200
     assert len(calls) == 1
     assert calls[0].method == "HEAD"
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "file:///etc/passwd",
+        "data:text/plain,blocked",
+        "ftp://example.com/file",
+        "https://denied.test/",
+    ],
+)
+async def test_transport_blocks_unsafe_redirect_schemes_and_domains(
+    monkeypatch: pytest.MonkeyPatch, target: str
+) -> None:
+    import asyncio
+
+    async def resolve(*args, **kwargs):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.215.14", 443))]
+
+    monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", resolve)
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(302, headers={"location": target})
+
+    async with httpx.AsyncClient(
+        transport=SafetyTransport(SafetyPolicy(["denied.test"]), httpx.MockTransport(handler)),
+        follow_redirects=True,
+    ) as client:
+        with pytest.raises((httpx.HTTPError, httpx.InvalidURL)):
+            await client.get("https://example.com/")
+    assert len(calls) == 1
+
+
+async def test_transport_checks_every_redirect_hop(monkeypatch: pytest.MonkeyPatch) -> None:
+    import asyncio
+
+    async def resolve(*args, **kwargs):
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.215.14", 443))]
+
+    monkeypatch.setattr(asyncio.get_running_loop(), "getaddrinfo", resolve)
+    paths = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        paths.append(request.url.path)
+        target = "/next" if request.url.path == "/" else "http://169.254.169.254/"
+        return httpx.Response(302, headers={"location": target})
+
+    async with httpx.AsyncClient(
+        transport=SafetyTransport(SafetyPolicy([]), httpx.MockTransport(handler)),
+        follow_redirects=True,
+    ) as client:
+        with pytest.raises(httpx.UnsupportedProtocol):
+            await client.get("https://example.com/")
+    assert paths == ["/", "/next"]

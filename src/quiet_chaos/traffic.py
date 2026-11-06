@@ -14,6 +14,7 @@ from bs4 import BeautifulSoup
 from quiet_chaos.bounded import FailureCooldown, LRUSet
 from quiet_chaos.config import AppConfig, TrafficMode
 from quiet_chaos.defaults import DEFAULT_SEARCH_QUERIES
+from quiet_chaos.downloads import read_response_limited
 from quiet_chaos.fingerprints import browser_headers
 from quiet_chaos.health import RuntimeStats
 from quiet_chaos.pacing import next_pause_seconds
@@ -89,8 +90,10 @@ class TrafficGenerator:
                     await self._asset_fetch(client)
             except Exception as error:  # noqa: BLE001 - traffic generation should keep running.
                 self._stats.requests_failed += 1
-                self._stats.last_error = f"{type(error).__name__}: {error}"
-                LOGGER.warning("traffic action failed", extra={"qc_error": self._stats.last_error})
+                self._stats.last_error = type(error).__name__
+                LOGGER.warning(
+                    "traffic action failed", extra={"qc_error": f"{type(error).__name__}: {error}"}
+                )
 
     async def _http_browse(self, client: httpx.AsyncClient) -> None:
         url = self._choose_url()
@@ -103,10 +106,17 @@ class TrafficGenerator:
 
     async def _dns_lookup(self) -> None:
         url = self._choose_url()
+        if not self._safety.is_allowed_url(url):
+            return
         host = urlparse(url).hostname
         if not host:
             return
-        await asyncio.to_thread(self._resolver.resolve, host, "A")
+        answer = await asyncio.to_thread(
+            self._resolver.resolve, host, "A", lifetime=self._config.request_timeout_seconds
+        )
+        addresses = [str(record) for record in answer]
+        if not addresses or not all(self._safety.is_public_address(value) for value in addresses):
+            raise httpx.UnsupportedProtocol("DNS answer blocked by safety policy")
         self._stats.dns_lookups += 1
         LOGGER.info("dns lookup", extra={"qc_domain": host})
 
@@ -196,9 +206,7 @@ class TrafficGenerator:
     ) -> httpx.Response:
         for attempt in range(self._config.max_request_retries + 1):
             try:
-                response = await client.request(method, url, headers=headers)
-                response.raise_for_status()
-                return response
+                return await self._request_bounded(client, method, url, headers)
             except (httpx.HTTPStatusError, httpx.UnsupportedProtocol):
                 raise
             except (httpx.TimeoutException, httpx.TransportError):
@@ -212,6 +220,47 @@ class TrafficGenerator:
                 )
                 await asyncio.sleep(delay)
         raise RuntimeError("unreachable retry state")
+
+    async def _request_bounded(
+        self, client: httpx.AsyncClient, method: str, url: str, headers: dict[str, str]
+    ) -> httpx.Response:
+        request = client.build_request(
+            method, url, headers={**headers, "accept-encoding": "gzip, deflate"}
+        )
+        history: list[httpx.Response] = []
+        while True:
+            if len(history) > client.max_redirects:
+                raise httpx.TooManyRedirects("Exceeded maximum allowed redirects", request=request)
+            response = await client.send(request, stream=True, follow_redirects=False)
+            try:
+                if response.next_request is not None:
+                    history.append(response)
+                    request = response.next_request
+                    continue
+                response.raise_for_status()
+                content = (
+                    await read_response_limited(response, self._config.max_response_bytes)
+                    if method != "HEAD"
+                    else b""
+                )
+                response_headers = response.headers.copy()
+                if method != "HEAD":
+                    response_headers.pop("content-encoding", None)
+                    response_headers.pop("transfer-encoding", None)
+                    response_headers["content-length"] = str(len(content))
+                result = httpx.Response(
+                    response.status_code,
+                    headers=response_headers,
+                    content=content,
+                    request=response.request,
+                    extensions=response.extensions,
+                    history=history,
+                )
+                result.encoding = response.encoding
+                return result
+            finally:
+                self._stats.response_body_bytes_received += response.num_bytes_downloaded
+                await response.aclose()
 
     async def _pause_between_actions(self, deadline: float | None = None) -> None:
         pause_seconds = next_pause_seconds(self._config.pacing, self._rng)

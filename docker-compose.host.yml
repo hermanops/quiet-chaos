@@ -8,13 +8,15 @@ services:
     image: quiet-chaos:local
     restart: unless-stopped
     cap_drop: ["ALL"]
+    environment:
+      - QUIET_CHAOS_HEALTH_TOKEN
     command:
       ["run", "--config", "/app/config.toml", "--cache-dir", "/home/nonroot/.cache/quiet-chaos"]
     ports:
       - "127.0.0.1:8080:8080"
     healthcheck:
       test:
-        ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080', timeout=3).read()"]
+        ["CMD", "python", "-c", "from quiet_chaos.health import check_health; check_health()"]
       interval: 30s
       timeout: 5s
       start_period: 20s

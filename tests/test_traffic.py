@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 from quiet_chaos.config import AppConfig
+from quiet_chaos.downloads import SourceTooLargeError
 from quiet_chaos.health import RuntimeStats
 from quiet_chaos.safety import SafetyTransport
 from quiet_chaos.seed_sources import SeedStore
@@ -215,3 +216,250 @@ async def test_safe_request_does_not_retry_blocked_dns(monkeypatch: pytest.Monke
     assert len(resolutions) == 1
     assert calls == []
     assert generator._stats.requests_succeeded == 0
+
+
+class TrackedStream(httpx.AsyncByteStream):
+    def __init__(self, chunks: list[bytes]) -> None:
+        self.chunks = chunks
+        self.reads = 0
+        self.closed = False
+
+    async def __aiter__(self):
+        for chunk in self.chunks:
+            self.reads += 1
+            yield chunk
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+async def test_safe_request_limits_body_and_closes_without_retry() -> None:
+    generator = make_generator(
+        AppConfig(seed_sources=[], max_response_bytes=1024, failure_cooldown_threshold=1)
+    )
+    stream = TrackedStream([b"x" * 1025, b"unread"])
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, stream=stream)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        with pytest.raises(SourceTooLargeError):
+            await generator._safe_request(client, "GET", "https://example.com/")
+
+    assert stream.closed
+    assert stream.reads == 1
+    assert len(calls) == 1
+    assert generator._stats.requests_succeeded == 0
+    assert generator._failures.is_blocked("https://example.com/")
+
+
+async def test_safe_request_does_not_read_redirect_body() -> None:
+    generator = make_generator()
+    stream = TrackedStream([b"x" * 2_000_000])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/":
+            return httpx.Response(302, headers={"location": "/final"}, stream=stream)
+        return httpx.Response(200, text="ok")
+
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(handler), follow_redirects=True
+    ) as client:
+        response = await generator._safe_request(client, "GET", "https://example.com/")
+
+    assert response is not None
+    assert response.text == "ok"
+    assert response.url.path == "/final"
+    assert stream.closed
+    assert stream.reads == 0
+
+
+async def test_safe_request_head_ignores_advertised_body_length() -> None:
+    generator = make_generator()
+    stream = TrackedStream([b"must not read"])
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                200, headers={"content-length": "9999999999"}, stream=stream
+            )
+        )
+    ) as client:
+        response = await generator._safe_request(client, "HEAD", "https://example.com/")
+    assert response is not None
+    assert response.content == b""
+    assert response.headers["content-length"] == "9999999999"
+    assert stream.closed
+    assert stream.reads == 0
+    assert generator._stats.response_body_bytes_received == 0
+
+
+async def test_safe_request_counts_streamed_bytes() -> None:
+    generator = make_generator()
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, stream=TrackedStream([b"hello", b"world"]))
+        )
+    ) as client:
+        response = await generator._safe_request(client, "GET", "https://example.com/")
+    assert response is not None
+    assert response.content == b"helloworld"
+    assert generator._stats.response_body_bytes_received == 10
+
+
+async def test_safe_request_enforces_redirect_limit() -> None:
+    generator = make_generator()
+    streams = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        stream = TrackedStream([b"not read"])
+        streams.append(stream)
+        return httpx.Response(302, headers={"location": "/again"}, stream=stream)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler), max_redirects=2) as client:
+        with pytest.raises(httpx.TooManyRedirects):
+            await generator._safe_request(client, "GET", "https://example.com/")
+    assert len(streams) == 3
+    assert all(stream.closed and stream.reads == 0 for stream in streams)
+
+
+async def test_run_once_scrubs_error_message_from_stats(monkeypatch: pytest.MonkeyPatch) -> None:
+    generator = make_generator(AppConfig(seed_sources=[], modes=["dns"]))
+
+    async def fail_lookup():
+        raise ValueError("sensitive https://internal.example/path")
+
+    monkeypatch.setattr(generator, "_dns_lookup", fail_lookup)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda request: None)) as client:
+        await generator.run_once(client)
+    assert generator._stats.last_error == "ValueError"
+    assert generator._stats.requests_failed == 1
+
+
+@pytest.mark.parametrize(
+    ("addresses", "allowed"),
+    [
+        (["93.184.215.14"], True),
+        (["127.0.0.1"], False),
+        (["10.0.0.1", "93.184.215.14"], False),
+        ([], False),
+    ],
+)
+async def test_dns_lookup_validates_answers_and_sets_lifetime(
+    monkeypatch: pytest.MonkeyPatch, addresses: list[str], allowed: bool
+) -> None:
+    generator = make_generator(AppConfig(seed_sources=[], seed_urls=["https://example.com/"]))
+    generator._seeds._urls = ["https://example.com/"]
+    calls = []
+
+    def resolve(host, record_type, *, lifetime):
+        calls.append((host, record_type, lifetime))
+        return addresses
+
+    monkeypatch.setattr(generator._resolver, "resolve", resolve)
+    if allowed:
+        await generator._dns_lookup()
+    else:
+        with pytest.raises(httpx.UnsupportedProtocol):
+            await generator._dns_lookup()
+    assert calls == [("example.com", "A", generator._config.request_timeout_seconds)]
+    assert generator._stats.dns_lookups == int(allowed)
+
+
+@pytest.mark.parametrize("url", ["https://localhost/", "http://10.0.0.1/", "https://blocked.test/"])
+async def test_dns_lookup_does_not_resolve_denied_url(
+    monkeypatch: pytest.MonkeyPatch, url: str
+) -> None:
+    generator = make_generator(
+        AppConfig(seed_sources=[], seed_urls=[url], deny_domains=["localhost", "blocked.test"])
+    )
+    generator._seeds._urls = [url]
+
+    def unexpected_resolution(*args, **kwargs):
+        pytest.fail("Denied URL must not be resolved")
+
+    monkeypatch.setattr(generator._resolver, "resolve", unexpected_resolution)
+    await generator._dns_lookup()
+    assert generator._stats.dns_lookups == 0
+
+
+async def test_dns_lookup_timeout_records_failure(monkeypatch: pytest.MonkeyPatch) -> None:
+    import dns.exception
+
+    generator = make_generator(AppConfig(seed_sources=[], modes=["dns"]))
+
+    def resolve(*args, **kwargs):
+        raise dns.exception.Timeout()
+
+    monkeypatch.setattr(generator._resolver, "resolve", resolve)
+    async with httpx.AsyncClient() as client:
+        await generator.run_once(client)
+    assert generator._stats.dns_lookups == 0
+    assert generator._stats.requests_failed == 1
+    assert generator._stats.last_error == "Timeout"
+
+
+@pytest.mark.parametrize("status", [200, 500])
+async def test_safe_request_rejects_headers_without_reading_body(status: int) -> None:
+    generator = make_generator()
+    stream = TrackedStream([b"must not read"])
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(
+                status, headers={"content-length": "9999999999"}, stream=stream
+            )
+        )
+    ) as client:
+        expected = SourceTooLargeError if status == 200 else httpx.HTTPStatusError
+        with pytest.raises(expected):
+            await generator._safe_request(client, "GET", "https://example.com/")
+    assert stream.closed
+    assert stream.reads == 0
+
+
+async def test_safe_request_closes_failed_stream_before_retry() -> None:
+    generator = make_generator(AppConfig(seed_sources=[], retry_backoff_seconds=0))
+
+    class TimeoutStream(TrackedStream):
+        async def __aiter__(self):
+            yield b"partial"
+            raise httpx.ReadTimeout("transient read timeout")
+
+    failed = TimeoutStream([])
+    succeeded = TrackedStream([b"done"])
+    streams = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if streams:
+            assert failed.closed
+        stream = failed if not streams else succeeded
+        streams.append(stream)
+        return httpx.Response(200, stream=stream)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        response = await generator._safe_request(client, "GET", "https://example.com/")
+    assert response is not None
+    assert response.text == "done"
+    assert len(streams) == 2
+    assert all(stream.closed for stream in streams)
+    assert generator._stats.response_body_bytes_received == 11
+
+
+async def test_safe_request_closes_stream_on_cancellation() -> None:
+    generator = make_generator()
+
+    class CancelledStream(TrackedStream):
+        async def __aiter__(self):
+            yield b"partial"
+            raise asyncio.CancelledError
+
+    stream = CancelledStream([])
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(200, stream=stream))
+    ) as client:
+        with pytest.raises(asyncio.CancelledError):
+            await generator._safe_request(client, "GET", "https://example.com/")
+    assert stream.closed
+    assert generator._stats.requests_succeeded == 0
+    assert generator._stats.response_body_bytes_received == 7

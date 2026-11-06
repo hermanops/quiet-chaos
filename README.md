@@ -76,10 +76,12 @@ Quiet Chaos uses TOML. Start with [examples/config.toml](examples/config.toml).
 Important defaults:
 
 - `request_timeout_seconds = 8.0`
+- `max_response_bytes = 1000000` bounds both wire and decoded HTTP response bodies; oversized bodies fail without retries
 - `modes = ["http", "dns", "rss", "search", "assets"]`
 - `seed_sources` defaults to `https://tranco-list.eu/top-1m.csv.zip`
 - `user_agent_source.enabled = false` by default; set it to `true` to cache fresh user agents from `useragents.me`
 - `pacing.enabled = true` adds small bounded pauses between actions; see `[pacing]` in [examples/config.toml](examples/config.toml) for the tunable parameters
+- `pacing.timezone` optionally selects an IANA zone such as `Europe/Amsterdam`; omitting it preserves runtime-local time, including in containers
 - `stats_log.interval_seconds = 300` emits periodic structured counters for Docker log collection
 - `max_request_retries = 1` retries transient network failures once with jittered backoff
 - `seed_reinjection_probability = 0.1` occasionally returns to root seeds instead of only following discovered links
@@ -96,15 +98,46 @@ Host header and TLS hostname to prevent DNS rebinding. Environment HTTP proxies
 are not used, since they would bypass these destination checks. Telemetry export
 is separately configured and is not subject to this HTTP traffic policy.
 
-The host profile's diurnal pacing follows the container's local timezone, not
-necessarily the Docker host's. Verify the image's timezone before relying on the
-schedule. For direct local execution, bind the health endpoint to `127.0.0.1`;
-the example's `0.0.0.0` binding is intended for Docker with localhost-only port
-publishing.
+DNS mode intentionally queries the system-configured resolver, which may be on
+a private network; it does not connect to returned addresses. Denied URLs are
+not queried, lookup lifetime is bounded, and only entirely public A answers
+are counted as successful lookups. HTTP DNS resolution separately validates
+and pins connection addresses. This does not bypass local DNS configuration.
 
-The health endpoint is unauthenticated, so keep it on a trusted interface. Both
-Compose profiles publish it only on host loopback. The health response includes
-runtime counters but not the last requested URL. The host profile mounts
+HTTP bodies are streamed and bounded before parsing, including gzip/deflate
+decompression. Redirect bodies are closed without downloading them; every next
+destination still passes the safety transport. Unsupported content encodings
+are rejected. `response_body_bytes_received` counts observed HTTP body bytes
+before decompression, including partial failed reads; it is not total network
+traffic or outbound egress and excludes headers, DNS and TLS overhead.
+
+### Health Access
+
+Without an explicit configuration, the listener defaults to `127.0.0.1`.
+Both container templates deliberately use `0.0.0.0` inside Docker and publish
+only on host loopback. For direct local execution using either template,
+change `health.host` to `127.0.0.1`. Host-loopback publishing does not isolate
+the endpoint from other containers on the same Docker network.
+
+Set `QUIET_CHAOS_HEALTH_TOKEN` in the process environment to require an
+`Authorization: Bearer <token>` header. An unset variable leaves authentication
+disabled; an empty or invalid token fails startup. Use a printable ASCII token
+without spaces, keep it out of TOML/source control, and provision it through
+your deployment's environment secret mechanism. Both Compose profiles pass
+the variable through, and all container health probes use the same token.
+Recreate containers after changing their environment. The endpoint uses plain
+HTTP: keep it on a trusted interface or place it behind a TLS reverse proxy.
+
+Only GET and HEAD on `/` are supported. Host names default to localhost,
+loopback addresses and the concrete bind host. Add an intentional proxy's
+Host name through `health.allowed_hosts = ["monitor.example"]`; wildcard binds
+do not accept arbitrary Host names. Host validation is not authentication.
+Health statistics expose exception class names, not error messages or requested
+URLs. Detailed error logs can still contain URLs and should be access-controlled.
+
+Dockerfile and Compose healthchecks intentionally use the same probe function:
+Compose overrides the image check, while the image check covers `docker run`.
+The host profile mounts
 `/opt/quiet-chaos/config.toml` read-only; ensure the file is readable and its
 parent directories are traversable by the container's `nonroot` user.
 
@@ -112,15 +145,43 @@ The Dockerfile pins Chainguard base images by manifest digest for reproducible
 builds. To update them, inspect the desired Chainguard image manifests, update
 both digest references, and rebuild the image.
 
+### Telemetry
+
+Install `quiet-chaos[otel]` (or `python -m pip install -e '.[otel]'` in a checkout)
+and enable `[telemetry]` in TOML. The default container build installs only core
+dependencies; a telemetry-enabled image must also install the `otel` extra.
+The HTTP exporter honors standard OpenTelemetry environment variables:
+
+- `OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318` sets a base URL; the exporter appends `/v1/traces`.
+- `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT=http://collector:4318/v1/traces` sets the complete trace URL and takes precedence.
+- `OTEL_EXPORTER_OTLP_HEADERS` or `OTEL_EXPORTER_OTLP_TRACES_HEADERS` configures collector credentials through the environment.
+
+Without overrides, the HTTP exporter targets `http://localhost:4318/v1/traces`.
+Inside Docker, use the collector service name for a separate container rather
+than `localhost`. No additional TOML endpoint setting is required.
+
 ## Development
 
 ```bash
 python -m pip install -e '.[dev]'
 ruff check .
 ruff format --check .
-semgrep scan --config p/python --config p/security-audit .
+semgrep scan --config p/python --config p/security-audit --error --strict --metrics off .
 pytest
 ```
+
+CI gates pull requests and releases with Semgrep as well as lint, formatting,
+tests and a Docker build. Registry rules can evolve independently of the pinned
+Semgrep version; findings and scan errors fail the check. Repository branch
+protection must require the `security` check to enforce it before merging.
+
+[Dependency Audit](.github/workflows/security.yml) runs weekly and on manual
+dispatch for Python 3.12-3.14. It resolves runtime and optional telemetry
+dependencies in a clean environment, audits their exact versions from separate
+tooling, and retains JSON reports for 30 days even when advisories fail the job.
+It excludes only the unpublished local project, not its dependencies. Audit
+failures require investigation; no vulnerability IDs are automatically ignored.
+Dependabot continues checking Python dependencies, Actions and Docker images.
 
 ## Releases
 
@@ -149,11 +210,11 @@ To release a version:
 	```
 
 3. Create and push an annotated tag matching the version exactly, prefixed with
-	`v`. For the current `0.1.1` version:
+	`v`. For version `0.2.0`:
 
 	```bash
-	git tag -a v0.1.1 -m "Release v0.1.1"
-	git push origin v0.1.1
+	git tag -a v0.2.0 -m "Release v0.2.0"
+	git push origin v0.2.0
 	```
 
 Pushing a `v*` tag runs version validation, Ruff lint and format checks, pytest on

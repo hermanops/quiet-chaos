@@ -9,7 +9,7 @@ import typer
 
 from quiet_chaos.config import load_config
 from quiet_chaos.events import configure_logging
-from quiet_chaos.health import RuntimeStats, start_health_server
+from quiet_chaos.health import RuntimeStats, health_token_from_env, start_health_server
 from quiet_chaos.safety import SafetyPolicy, SafetyTransport
 from quiet_chaos.seed_sources import SeedStore
 from quiet_chaos.telemetry import Telemetry
@@ -53,6 +53,7 @@ def run(
 
 async def _run(config_path: Path | None, cache_dir: Path, refresh_seeds: bool, once: bool) -> None:
     config = load_config(config_path)
+    health_token = health_token_from_env() if config.health.enabled and not once else None
     configure_logging(config.log_level, config.json_logs)
 
     stats = RuntimeStats.start()
@@ -71,7 +72,13 @@ async def _run(config_path: Path | None, cache_dir: Path, refresh_seeds: bool, o
 
     health_server = None
     if config.health.enabled and not once:
-        health_server = await start_health_server(config.health.host, config.health.port, stats)
+        health_server = await start_health_server(
+            config.health.host,
+            config.health.port,
+            stats,
+            allowed_hosts=config.health.allowed_hosts,
+            token=health_token,
+        )
         LOGGER.info(
             "health endpoint started",
             extra={"qc_host": config.health.host, "qc_port": config.health.port},

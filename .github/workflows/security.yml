@@ -1,0 +1,53 @@
+name: Dependency Audit
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install audit tooling
+        run: |
+          python -m venv "$RUNNER_TEMP/audit-tools"
+          "$RUNNER_TEMP/audit-tools/bin/python" -m pip install 'pip-audit==2.10.1'
+      - name: Install runtime and optional telemetry dependencies
+        run: |
+          python -m venv "$RUNNER_TEMP/audit-runtime"
+          "$RUNNER_TEMP/audit-runtime/bin/python" -m pip install --upgrade pip
+          "$RUNNER_TEMP/audit-runtime/bin/python" -m pip install -e '.[otel]'
+      - name: Audit resolved dependencies
+        run: |
+          "$RUNNER_TEMP/audit-runtime/bin/python" - <<'PY' > "$RUNNER_TEMP/runtime-requirements.txt"
+          from importlib.metadata import distributions
+
+          for distribution in sorted(distributions(), key=lambda item: item.metadata["Name"]):
+              name = distribution.metadata["Name"]
+              if name.lower().replace("_", "-") != "quiet-chaos":
+                  print(f"{name}=={distribution.version}")
+          PY
+          "$RUNNER_TEMP/audit-tools/bin/pip-audit" \
+            --requirement "$RUNNER_TEMP/runtime-requirements.txt" --no-deps --disable-pip \
+            --strict --progress-spinner off --format json --output pip-audit.json
+      - name: Retain audit report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: pip-audit-python-${{ matrix.python-version }}
+          path: pip-audit.json
+          retention-days: 30
+          if-no-files-found: warn
