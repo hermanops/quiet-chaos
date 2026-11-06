@@ -22,7 +22,12 @@ import httpx
 import tldextract
 
 from quiet_chaos.config import AppConfig, TrendConfig
-from quiet_chaos.downloads import MAX_SOURCE_BYTES, read_decompressed_limited, read_response_limited
+from quiet_chaos.downloads import (
+    MAX_SOURCE_BYTES,
+    SourceTooLargeError,
+    read_decompressed_limited,
+    read_response_limited,
+)
 from quiet_chaos.safety import SafetyPolicy, SafetyTransport
 
 _SUFFIX = tldextract.TLDExtract(
@@ -76,23 +81,34 @@ def parse_radar(content: bytes) -> dict[str, int]:
     return ranks
 
 
-def parse_ranked_zip(content: bytes, limit: int) -> dict[str, int]:
+def parse_ranked_zip(
+    content: bytes, limit: int, max_bytes: int = MAX_SOURCE_BYTES
+) -> dict[str, int]:
     with zipfile.ZipFile(io.BytesIO(content)) as archive:
         names = archive.namelist()
         if len(names) != 1:
             raise ValueError("Expected one ranking CSV")
         with archive.open(names[0]) as stream:
-            data = read_decompressed_limited(stream, MAX_SOURCE_BYTES)
-    ranks: dict[str, int] = {}
-    for row in csv.reader(io.StringIO(data.decode("utf-8-sig"))):
-        if len(row) != 2:
-            raise ValueError("Invalid ranking row")
-        rank = int(row[0])
-        if rank < 1:
-            raise ValueError("Invalid rank")
-        ranks[row[1].strip()] = rank
-        if len(ranks) >= limit:
-            break
+            ranks: dict[str, int] = {}
+            total = 0
+            first_row = True
+            while len(ranks) < limit:
+                remaining = max_bytes - total
+                line = stream.readline(remaining + 1)
+                if not line:
+                    break
+                total += len(line)
+                if total > max_bytes:
+                    raise SourceTooLargeError(f"Decompressed source exceeds {max_bytes} bytes")
+                text = line.decode("utf-8-sig" if first_row else "utf-8")
+                first_row = False
+                row = next(csv.reader([text]))
+                if len(row) != 2:
+                    raise ValueError("Invalid ranking row")
+                rank = int(row[0])
+                if rank < 1:
+                    raise ValueError("Invalid rank")
+                ranks[row[1].strip()] = rank
     if not ranks:
         raise ValueError("Empty ranking")
     return ranks

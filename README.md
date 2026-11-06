@@ -9,7 +9,7 @@ The default configuration keeps traffic deliberately modest: bounded pacing betw
 - Python 3.12+ async runtime using `httpx`.
 - Traffic modes for HTTP browsing, DNS lookups, RSS polling, search-like Wikipedia API queries, and static asset HEAD requests.
 - Automatic public seed-list refresh from Tranco with a local cache and built-in fallback seeds.
-- Optional trend discovery with reviewable, reproducible daily pools and persistent budgets.
+- Trend discovery enabled by default, with reviewable, reproducible daily pools and persistent budgets.
 - Optional cached refresh of real browser user-agent strings.
 - Browser-family request headers and bounded visited/failure caches to reduce repetitive traffic.
 - Structured JSON logs for easy ingestion into Elastic, Loki, or other log tools.
@@ -25,6 +25,12 @@ Run on the Docker host with Compose:
 docker compose up --build
 ```
 
+Trend discovery is enabled by default, even when `[trend_sources]` is omitted.
+The bundled local config uses token-free Tranco and Cisco Umbrella sources. The
+first refresh requires outbound HTTPS access. Set
+`[trend_sources].enabled = false` to opt out; an explicit `true` is also shown in
+both example configs.
+
 Check health:
 
 ```bash
@@ -35,10 +41,18 @@ Compose binds the health endpoint to localhost by default. Put it behind an auth
 
 The container runs as `nonroot`, reads `/app/config.toml`, and stores refreshed seed and user-agent caches in the `quiet-chaos-cache` volume mounted at `/home/nonroot/.cache/quiet-chaos`.
 
-For a dedicated Docker host, keep the host config at `/opt/quiet-chaos/config.toml` — [examples/config.srv.toml](examples/config.srv.toml) is an always-on host profile (no `run_for_seconds` cap, diurnal pacing); copy it to that path before the first deploy. From a checkout of this repository, build and run the host template:
+For a dedicated Docker host, keep the host config at `/opt/quiet-chaos/config.toml` — [examples/config.srv.toml](examples/config.srv.toml) is an always-on host profile (no `run_for_seconds` cap, diurnal pacing) with trend discovery enabled. The Compose file bind-mounts this host file; rebuilding the image does not update it. Copy the template before first deploy, and copy it again when updating its settings:
 
 ```bash
+cp examples/config.srv.toml /opt/quiet-chaos/config.toml
 docker compose -f docker-compose.host.yml up -d
+```
+
+After changing the mounted config on an existing host, recreate the service so
+the process loads it:
+
+```bash
+docker compose -f docker-compose.host.yml up -d --force-recreate
 ```
 
 Useful host checks:
@@ -80,6 +94,7 @@ Important defaults:
 - `max_response_bytes = 1000000` bounds both wire and decoded HTTP response bodies; oversized bodies fail without retries
 - `modes = ["http", "dns", "rss", "search", "assets"]`
 - `seed_sources` defaults to `https://tranco-list.eu/top-1m.csv.zip`
+- `trend_sources.enabled = true` refreshes Tranco and Cisco Umbrella and adds their daily pool to seed selection; set it to `false` to disable provider refreshes and trend budgets
 - `user_agent_source.enabled = false` by default; set it to `true` to cache fresh user agents from `useragents.me`
 - `pacing.enabled = true` adds small bounded pauses between actions; see `[pacing]` in [examples/config.toml](examples/config.toml) for the tunable parameters
 - `pacing.timezone` optionally selects an IANA zone such as `Europe/Amsterdam`; omitting it preserves runtime-local time, including in containers
@@ -90,9 +105,11 @@ Important defaults:
 
 ### Trend Discovery
 
-Set `[trend_sources] enabled = true` to add a daily pool to the existing seed
-selection. Discovery is separate from the existing seed sources. Inspect without
-generating traffic, or replay a saved snapshot without provider requests:
+Trend discovery is enabled by default, adding a daily pool to the existing seed
+selection. Discovery is separate from the seed sources. Set `enabled = false`
+to turn it off. Provider refreshes require outbound HTTPS on startup. Inspect
+without generating traffic, or replay a saved snapshot without provider
+requests:
 
 ```bash
 quiet-chaos trends --config examples/config.toml
@@ -103,7 +120,10 @@ The token-free baseline uses [Tranco](https://tranco-list.eu/) and the
 [Cisco Umbrella popularity list](https://umbrella-static.s3-us-west-1.amazonaws.com/index.html).
 Cisco publishes DNS-based daily rankings and dated historical lists; check
 Cisco's current terms before relying on or redistributing its data. Snapshots
-accumulate locally rather than downloading historical lists on startup. Optional
+accumulate locally rather than downloading historical lists on startup. The
+default profiles omit the full CrUX global CSV as a seed source because its
+decompressed size currently exceeds the application's 32 MiB source limit;
+CrUX remains an optional trend provider. Optional
 [Majestic Million](https://majestic.com/reports/majestic-million) measures
 referring subnets, not current visitors; its list is licensed CC BY 3.0 and
 the full CSV is approximately 80 MB. Optional
@@ -283,9 +303,9 @@ To release a version:
 Pushing a `v*` tag runs version validation, Ruff lint and format checks, pytest on
 Python 3.12-3.14, and a Docker build without publishing the image. The tag must
 equal `v` plus the version in the tagged commit's [pyproject.toml](pyproject.toml).
-Only after all checks succeed does CI create a GitHub Release with generated
-release notes and GitHub's source archives; no wheel, sdist, or container image
-is uploaded. Review the generated notes on GitHub after creation.
+Only after all checks succeed does CI create a GitHub Release with notes from the
+matching dated `CHANGELOG.md` section and GitHub's source archives; no wheel,
+sdist, or container image is uploaded. Review the notes on GitHub after creation.
 
 If checks fail, no release is created. Fix code failures on `main` and use a new
 version and tag; do not move an existing release tag. For a transient CI failure,

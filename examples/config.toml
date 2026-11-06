@@ -66,15 +66,9 @@ url = "https://tranco-list.eu/top-1m.csv.zip"
 limit = 500
 refresh_hours = 24
 
-[[seed_sources]]
-kind = "crux_gzip_csv"
-url = "https://raw.githubusercontent.com/zakird/crux-top-lists/main/data/global/current.csv.gz"
-limit = 500
-refresh_hours = 24
-
 [trend_sources]
-# Discovery is separate from the seed sources above and is disabled by default.
-enabled = false
+# Discovery adds a daily pool alongside the seed sources above.
+enabled = true
 refresh_hours = 24
 pool_size = 30
 lookback_days = 28

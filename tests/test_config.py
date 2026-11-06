@@ -25,19 +25,19 @@ def test_default_config_is_bounded() -> None:
     assert config.health.host == "127.0.0.1"
     assert config.health.allowed_hosts == []
     assert TrafficMode.DNS in config.modes
-    assert config.trend_sources.enabled is False
+    assert config.trend_sources.enabled is True
     assert config.trend_sources.pool_size == 30
     assert config.trend_sources.refresh_hours == 24
 
 
-def test_trend_configuration_is_opt_in_and_bounded(tmp_path: Path) -> None:
+def test_trend_configuration_can_be_disabled_and_is_bounded(tmp_path: Path) -> None:
     config_file = tmp_path / "trends.toml"
     config_file.write_text(
-        "[trend_sources]\nenabled = true\npool_size = 20\ndaily_requests = 50\n",
+        "[trend_sources]\nenabled = false\npool_size = 20\ndaily_requests = 50\n",
         encoding="utf-8",
     )
     config = load_config(config_file)
-    assert config.trend_sources.enabled is True
+    assert config.trend_sources.enabled is False
     assert config.trend_sources.pool_size == 20
     assert config.trend_sources.daily_requests == 50
     with pytest.raises(ValidationError):

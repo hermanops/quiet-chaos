@@ -10,6 +10,7 @@ WORKDIR /app
 COPY --chown=nonroot:nonroot pyproject.toml README.md /app/
 COPY --chown=nonroot:nonroot src /app/src
 RUN python -m pip install --user .
+RUN mkdir -p /home/nonroot/.cache/quiet-chaos
 
 FROM cgr.dev/chainguard/python:latest@sha256:f3e5face39b0acd813fae456df27b33bf6a6bffba5d201d15f6498138cb8fd96
 
@@ -20,6 +21,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 COPY --from=build --chown=nonroot:nonroot /home/nonroot/.local /home/nonroot/.local
+COPY --from=build --chown=nonroot:nonroot /home/nonroot/.cache/quiet-chaos /home/nonroot/.cache/quiet-chaos
 COPY --chown=nonroot:nonroot examples/config.toml /app/config.toml
 
 USER nonroot

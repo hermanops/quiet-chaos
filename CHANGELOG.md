@@ -4,6 +4,19 @@ All notable changes to Quiet Chaos are documented here.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-06
+
+### Changed
+
+- Enable trend discovery by default, including provider refreshes at startup and HTTPS-only budgeted generated traffic; set `trend_sources.enabled = false` to opt out.
+- Enable trend discovery in both example profiles and omit the global CrUX seed CSV that exceeds the decompression limit.
+
+### Fixed
+
+- Prepare a nonroot-writable cache mountpoint for fresh Docker volumes.
+- Parse only the requested ranking ZIP rows within the decompression limit so the default Cisco Umbrella source can be used.
+- Populate GitHub Release notes from the matching dated changelog section.
+
 ## [0.3.0] - 2026-11-06
 
 ### Added
@@ -39,6 +52,7 @@ All notable changes to Quiet Chaos are documented here.
 - Missing RSS feed paths are handled gracefully.
 - Health requests are bounded and validated, and container probes use the same optional token as the server.
 
-[Unreleased]: https://github.com/hermanops/quiet-chaos/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/hermanops/quiet-chaos/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/hermanops/quiet-chaos/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/hermanops/quiet-chaos/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/hermanops/quiet-chaos/compare/v0.1.3...v0.2.0

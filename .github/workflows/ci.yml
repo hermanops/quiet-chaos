@@ -94,4 +94,28 @@ jobs:
           GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$RELEASE_TAG" --verify-tag --generate-notes --title "$RELEASE_TAG"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          version = os.environ["RELEASE_TAG"].removeprefix("v")
+          lines = Path("CHANGELOG.md").read_text(encoding="utf-8").splitlines()
+          heading = f"## [{version}] - "
+          start = next((index for index, line in enumerate(lines) if line.startswith(heading)), None)
+          if start is None:
+              raise SystemExit(f"No dated changelog section found for {version}")
+          end = next(
+              (index for index in range(start + 1, len(lines)) if lines[index].startswith("## [")),
+              len(lines),
+          )
+          section = lines[start + 1 : end]
+          notes = "\n".join(
+              line[1:] if line.startswith("### ") else line for line in section
+          ).strip()
+          if not notes:
+              raise SystemExit(f"Changelog section for {version} is empty")
+          output = Path(os.environ["RUNNER_TEMP"]) / "quiet-chaos-release-notes.md"
+          output.write_text(notes + "\n", encoding="utf-8")
+          PY
+          gh release create "$RELEASE_TAG" --verify-tag --title "$RELEASE_TAG" \
+            --notes-file "$RUNNER_TEMP/quiet-chaos-release-notes.md"

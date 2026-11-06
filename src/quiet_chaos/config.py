@@ -27,7 +27,7 @@ class SeedSource(BaseModel):
 
 
 class TrendConfig(BaseModel):
-    enabled: bool = False
+    enabled: bool = True
     refresh_hours: int = Field(default=24, ge=1, le=720)
     pool_size: int = Field(default=30, ge=1, le=50)
     lookback_days: int = Field(default=28, ge=7, le=90)

@@ -44,6 +44,16 @@ def test_provider_parsers() -> None:
         parse_radar(b'{"success": false}')
 
 
+def test_ranked_zip_stops_at_limit_within_decompression_bound() -> None:
+    archive = io.BytesIO()
+    with zipfile.ZipFile(archive, "w") as output:
+        output.writestr("top.csv", "1,a.com\n2,b.com\n")
+
+    assert parse_ranked_zip(archive.getvalue(), limit=1, max_bytes=8) == {"a.com": 1}
+    with pytest.raises(httpx.HTTPError, match="Decompressed source exceeds"):
+        parse_ranked_zip(archive.getvalue(), limit=2, max_bytes=8)
+
+
 def test_domains_and_filters() -> None:
     policy = SafetyPolicy(["blocked.co.uk"])
     assert registrable_domain("www.example.co.uk") == "example.co.uk"

@@ -25,11 +25,9 @@ url = "https://tranco-list.eu/top-1m.csv.zip"
 limit = 500
 refresh_hours = 24
 
-[[seed_sources]]
-kind = "crux_gzip_csv"
-url = "https://raw.githubusercontent.com/zakird/crux-top-lists/main/data/global/current.csv.gz"
-limit = 500
-refresh_hours = 24
+[trend_sources]
+# Use the token-free Tranco and Cisco Umbrella sources by default.
+enabled = true
 
 [user_agent_source]
 enabled = false
