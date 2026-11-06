@@ -9,6 +9,7 @@ All notable changes to Quiet Chaos are documented here.
 ### Changed
 
 - Raise default daily trend budgets to 10 requests per registrable domain, 500 requests total, and 100 MiB of response body bytes.
+- Existing explicit budget overrides remain unchanged; restore the previous defaults with `daily_domain_requests = 3`, `daily_requests = 100`, and `daily_response_bytes = 26214400`.
 
 ### Fixed
 
