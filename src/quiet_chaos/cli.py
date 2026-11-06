@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
+from quiet_chaos.budget import DailyBudget
 from quiet_chaos.config import load_config
 from quiet_chaos.events import configure_logging
 from quiet_chaos.health import RuntimeStats, health_token_from_env, start_health_server
@@ -14,6 +17,7 @@ from quiet_chaos.safety import SafetyPolicy, SafetyTransport
 from quiet_chaos.seed_sources import SeedStore
 from quiet_chaos.telemetry import Telemetry
 from quiet_chaos.traffic import TrafficGenerator
+from quiet_chaos.trend_sources import TrendStore
 from quiet_chaos.user_agents import UserAgentStore
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
@@ -23,6 +27,34 @@ LOGGER = logging.getLogger(__name__)
 @app.callback()
 def main() -> None:
     """Generate bounded, observable background traffic noise."""
+
+
+@app.command("trends")
+def trends(
+    config: Annotated[Path | None, typer.Option("--config", "-c")] = None,
+    cache_dir: Annotated[Path, typer.Option("--cache-dir")] = Path(".cache/quiet-chaos"),
+    snapshot: Annotated[Path | None, typer.Option("--snapshot")] = None,
+    day: Annotated[str | None, typer.Option("--date")] = None,
+) -> None:
+    """Inspect or replay a trend snapshot without generating traffic."""
+    settings = load_config(config)
+    configure_logging(settings.log_level, settings.json_logs)
+    store = TrendStore(settings, cache_dir)
+    selected_day = date.fromisoformat(day) if day else datetime.now(UTC).date()
+    result = store.replay(snapshot) if snapshot else asyncio.run(store.refresh())
+    if result is None:
+        raise typer.Exit(code=1)
+    typer.echo(
+        json.dumps(
+            {
+                "snapshot_hash": result["snapshot_hash"],
+                "date": selected_day.isoformat(),
+                "origins": store.pool(result, selected_day),
+                "candidates": result["candidates"],
+            },
+            indent=2,
+        )
+    )
 
 
 @app.command()
@@ -60,8 +92,11 @@ async def _run(config_path: Path | None, cache_dir: Path, refresh_seeds: bool, o
     telemetry = Telemetry(config.telemetry.enabled, config.telemetry.service_name)
     telemetry.setup()
 
+    trend_store = TrendStore(config, cache_dir) if config.trend_sources.enabled else None
+    trend_snapshot = await trend_store.refresh() if trend_store else None
+    observations = trend_snapshot["sources"] if trend_snapshot else {} if trend_store else None
     seed_store = SeedStore(config, cache_dir)
-    seeds = await seed_store.load(refresh=refresh_seeds)
+    seeds = await seed_store.load(refresh=refresh_seeds, trend_observations=observations)
     stats.seeds_loaded = len(seeds)
     LOGGER.info("seed urls loaded", extra={"qc_seed_count": len(seeds)})
 
@@ -84,11 +119,19 @@ async def _run(config_path: Path | None, cache_dir: Path, refresh_seeds: bool, o
             extra={"qc_host": config.health.host, "qc_port": config.health.port},
         )
 
+    budget = (
+        DailyBudget(cache_dir / "trends" / "budget.sqlite3", config.trend_sources)
+        if trend_store
+        else None
+    )
     generator = TrafficGenerator(
         config=config,
         seeds=seed_store,
         stats=stats,
         telemetry=telemetry,
+        trend_store=trend_store,
+        trend_snapshot=trend_snapshot,
+        budget=budget,
     )
 
     if once:

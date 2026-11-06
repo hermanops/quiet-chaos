@@ -1,9 +1,11 @@
 import gzip
 import io
 import zipfile
+from pathlib import Path
 
 import pytest
 
+from quiet_chaos.config import AppConfig
 from quiet_chaos.downloads import SourceTooLargeError
 from quiet_chaos.seed_sources import SeedStore
 
@@ -16,6 +18,18 @@ def test_parse_tranco_zip() -> None:
     urls = SeedStore._parse_tranco_zip(archive_bytes.getvalue(), limit=2)
 
     assert urls == ["https://example.com/", "https://python.org/"]
+
+
+async def test_trend_observations_reuse_existing_tranco(tmp_path: Path, monkeypatch) -> None:
+    config = AppConfig(seed_urls=[], trend_sources={"enabled": True})
+    store = SeedStore(config, tmp_path)
+
+    async def unexpected_fetch(*args: object, **kwargs: object) -> list[str]:
+        raise AssertionError("duplicate provider request")
+
+    monkeypatch.setattr(store, "_load_source", unexpected_fetch)
+    urls = await store.load(trend_observations={"tranco": {"ranks": {"example.com": 1}}})
+    assert urls == ["https://example.com/"]
 
 
 def test_parse_crux_gzip_csv() -> None:

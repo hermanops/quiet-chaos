@@ -9,6 +9,7 @@ The default configuration keeps traffic deliberately modest: bounded pacing betw
 - Python 3.12+ async runtime using `httpx`.
 - Traffic modes for HTTP browsing, DNS lookups, RSS polling, search-like Wikipedia API queries, and static asset HEAD requests.
 - Automatic public seed-list refresh from Tranco with a local cache and built-in fallback seeds.
+- Optional trend discovery with reviewable, reproducible daily pools and persistent budgets.
 - Optional cached refresh of real browser user-agent strings.
 - Browser-family request headers and bounded visited/failure caches to reduce repetitive traffic.
 - Structured JSON logs for easy ingestion into Elastic, Loki, or other log tools.
@@ -86,6 +87,68 @@ Important defaults:
 - `max_request_retries = 1` retries transient network failures once with jittered backoff
 - `seed_reinjection_probability = 0.1` occasionally returns to root seeds instead of only following discovered links
 - `seed_sources` also supports `kind = "crux_gzip_csv"` for CrUX top-list CSV gzip files
+
+### Trend Discovery
+
+Set `[trend_sources] enabled = true` to add a daily pool to the existing seed
+selection. Discovery is separate from the existing seed sources. Inspect without
+generating traffic, or replay a saved snapshot without provider requests:
+
+```bash
+quiet-chaos trends --config examples/config.toml
+quiet-chaos trends --config examples/config.toml --snapshot .cache/quiet-chaos/trends/snapshot-EXAMPLE.json --date 2026-11-06
+```
+
+The token-free baseline uses [Tranco](https://tranco-list.eu/) and the
+[Cisco Umbrella popularity list](https://umbrella-static.s3-us-west-1.amazonaws.com/index.html).
+Cisco publishes DNS-based daily rankings and dated historical lists; check
+Cisco's current terms before relying on or redistributing its data. Snapshots
+accumulate locally rather than downloading historical lists on startup. Optional
+[Majestic Million](https://majestic.com/reports/majestic-million) measures
+referring subnets, not current visitors; its list is licensed CC BY 3.0 and
+the full CSV is approximately 80 MB. Optional
+[CrUX Top Million](https://github.com/zakird/crux-top-lists) is monthly and
+its ranks are broad buckets, not exact positions.
+
+For Cloudflare Radar, set `QUIET_CHAOS_RADAR_TOKEN` in the process environment
+to a token with Account > Radar > Read permission. See
+[Cloudflare's setup](https://developers.cloudflare.com/radar/get-started/first-request/)
+and [ranking documentation](https://developers.cloudflare.com/radar/investigate/domain-ranking-datasets/).
+Review provider terms before use. Radar's top 100 is individually ranked;
+its larger weekly buckets are unordered. Radar is used when a token is present;
+without one, discovery works with Tranco and Cisco. Tranco incorporates other
+lists, including Radar, so source agreement is not statistical independence.
+
+Each provider is attempted at most once per configured interval, including
+failed attempts. Dated snapshots contain ranks, timestamps, HTTP validators,
+source hashes, categories, decisions, and the final scores. A failed refresh
+or ranking retains the last valid snapshot. When a static Tranco or CrUX source
+matches an enabled trend provider, it reuses
+that provider's observation, and `--refresh-seeds` does not bypass the trend
+refresh interval. Registrable domains use the public suffix list bundled with
+`tldextract`; updating the package updates that list without background downloads.
+A new installation has no history: momentum is unknown until observations at
+least seven days apart exist.
+Momentum averages observed nonnegative relative rank improvement over the
+seven- and 28-day lookbacks, with Radar observations weighted twice. The score
+is 60% momentum, 30% normalized Tranco rank, and 10% source agreement;
+unavailable components are omitted and weights renormalized. CrUX and Majestic
+contribute only to agreement. Sampling without replacement uses the snapshot
+hash and UTC date. Filters can leave fewer than the configured pool size.
+Categories are operator-supplied; an allow-category filter excludes unknowns.
+Popularity lists include infrastructure and are not guarantees of public
+websites or content suitability; review the pool and configure deny rules.
+
+When enabled, persistent UTC-day budgets default to three requests per
+registrable domain, 100 requests total, and 25 MiB of response wire-body bytes.
+They cover all generated HTTP attempts, redirects, retries, and DNS actions,
+not just trend origins. HTTPS is required in this mode. HTTP 429/503 causes a
+per-domain cooldown honoring `Retry-After`, or one hour when absent or invalid.
+The byte counter covers body bytes observed by the application, not HTTP/TLS
+headers, DNS, discovery downloads, health, telemetry, or outbound traffic;
+transport buffering may read ahead. Persistent reservations fail closed after
+an interrupted request. Global exhaustion stops a continuous run. These are
+not network-interface bandwidth limits.
 
 ## Safety Model
 

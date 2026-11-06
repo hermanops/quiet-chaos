@@ -4,6 +4,7 @@ import asyncio
 import logging
 import random
 from dataclasses import asdict
+from datetime import UTC, datetime
 from urllib.parse import quote_plus, urljoin, urlparse
 
 import dns.resolver
@@ -12,6 +13,7 @@ import httpx
 from bs4 import BeautifulSoup
 
 from quiet_chaos.bounded import FailureCooldown, LRUSet
+from quiet_chaos.budget import BudgetExceeded, DailyBudget
 from quiet_chaos.config import AppConfig, TrafficMode
 from quiet_chaos.defaults import DEFAULT_SEARCH_QUERIES
 from quiet_chaos.downloads import read_response_limited
@@ -21,6 +23,7 @@ from quiet_chaos.pacing import next_pause_seconds
 from quiet_chaos.safety import SafetyPolicy, SafetyTransport
 from quiet_chaos.seed_sources import SeedStore
 from quiet_chaos.telemetry import Telemetry
+from quiet_chaos.trend_sources import TrendStore
 
 LOGGER = logging.getLogger(__name__)
 
@@ -32,11 +35,19 @@ class TrafficGenerator:
         seeds: SeedStore,
         stats: RuntimeStats,
         telemetry: Telemetry,
+        trend_store: TrendStore | None = None,
+        budget: DailyBudget | None = None,
+        trend_snapshot: dict | None = None,
     ) -> None:
         self._config = config
         self._seeds = seeds
         self._stats = stats
         self._telemetry = telemetry
+        self._trend_store = trend_store
+        self._budget = budget
+        self._trend_snapshot = trend_snapshot
+        self._trend_day = None
+        self._trend_urls: list[str] = []
         self._safety = SafetyPolicy(config.deny_domains)
         self._links: list[str] = []
         self._rng = random.Random()
@@ -53,8 +64,11 @@ class TrafficGenerator:
             asyncio.get_running_loop().time() + stop_after_seconds if stop_after_seconds else None
         )
         stats_task = None
+        trend_task = None
         if self._config.stats_log.enabled:
             stats_task = asyncio.create_task(self._log_stats_forever())
+        if self._trend_store is not None:
+            trend_task = asyncio.create_task(self._refresh_trends_forever())
         async with httpx.AsyncClient(
             follow_redirects=True,
             transport=SafetyTransport(self._safety),
@@ -66,14 +80,25 @@ class TrafficGenerator:
         ) as client:
             try:
                 while deadline is None or asyncio.get_running_loop().time() < deadline:
+                    if self._budget is not None and self._budget.exhausted():
+                        LOGGER.info("daily traffic budget exhausted")
+                        break
                     await self.run_once(client)
                     await self._pause_between_actions(deadline)
             finally:
                 if stats_task is not None:
                     stats_task.cancel()
                     await asyncio.gather(stats_task, return_exceptions=True)
+                if trend_task is not None:
+                    trend_task.cancel()
+                    await asyncio.gather(trend_task, return_exceptions=True)
 
     async def run_once(self, client: httpx.AsyncClient) -> None:
+        if self._trend_store is not None and self._trend_snapshot is not None:
+            today = datetime.now(UTC).date()
+            if self._trend_day != today:
+                self._trend_urls = self._trend_store.pool(self._trend_snapshot, today)
+                self._trend_day = today
         mode = random.choice(self._config.modes)
         with self._telemetry.span(f"traffic.{mode}") as span:
             span.set_attribute("traffic.mode", str(mode))
@@ -106,14 +131,27 @@ class TrafficGenerator:
 
     async def _dns_lookup(self) -> None:
         url = self._choose_url()
+        if self._budget is not None and urlparse(url).scheme != "https":
+            return
         if not self._safety.is_allowed_url(url):
             return
         host = urlparse(url).hostname
         if not host:
             return
-        answer = await asyncio.to_thread(
-            self._resolver.resolve, host, "A", lifetime=self._config.request_timeout_seconds
-        )
+        reservation = None
+        if self._budget is not None:
+            try:
+                reservation = self._budget.reserve(url, 1)
+            except BudgetExceeded:
+                LOGGER.info("dns lookup skipped by budget", extra={"qc_domain": host})
+                return
+        try:
+            answer = await asyncio.to_thread(
+                self._resolver.resolve, host, "A", lifetime=self._config.request_timeout_seconds
+            )
+        finally:
+            if reservation is not None and self._budget is not None:
+                self._budget.settle(*reservation, 0)
         addresses = [str(record) for record in answer]
         if not addresses or not all(self._safety.is_public_address(value) for value in addresses):
             raise httpx.UnsupportedProtocol("DNS answer blocked by safety policy")
@@ -166,6 +204,11 @@ class TrafficGenerator:
         LOGGER.info("request", extra={"qc_method": method, "qc_url": url})
         try:
             response = await self._request_with_retries(client, method, url, headers)
+        except BudgetExceeded:
+            LOGGER.info(
+                "traffic request skipped by budget", extra={"qc_domain": urlparse(url).hostname}
+            )
+            return None
         except httpx.HTTPStatusError as error:
             if allow_missing and error.response.status_code in {404, 410}:
                 self._stats.requests_failed += 1
@@ -187,14 +230,22 @@ class TrafficGenerator:
 
     def _choose_url(self) -> str:
         if self._links and self._rng.random() < self._config.seed_reinjection_probability:
-            return self._seeds.choose()
+            return (
+                self._rng.choice(self._seeds.urls + self._trend_urls)
+                if self._trend_urls
+                else self._seeds.choose()
+            )
         candidates = [
             url
-            for url in (self._links or self._seeds.urls)
+            for url in (self._links or self._seeds.urls + self._trend_urls)
             if url not in self._visited and not self._failures.is_blocked(url)
         ]
         if not candidates:
-            return self._seeds.choose()
+            return (
+                self._rng.choice(self._seeds.urls + self._trend_urls)
+                if self._trend_urls
+                else self._seeds.choose()
+            )
         return self._rng.choice(candidates)
 
     async def _request_with_retries(
@@ -231,15 +282,37 @@ class TrafficGenerator:
         while True:
             if len(history) > client.max_redirects:
                 raise httpx.TooManyRedirects("Exceeded maximum allowed redirects", request=request)
-            response = await client.send(request, stream=True, follow_redirects=False)
+            reservation = None
+            if self._budget is not None:
+                if request.method not in {"GET", "HEAD"} or request.url.scheme != "https":
+                    raise BudgetExceeded("Only HTTPS GET and HEAD are allowed")
+                client.cookies.clear()
+                request.headers.pop("cookie", None)
+                reservation = self._budget.reserve(
+                    str(request.url), self._config.max_response_bytes
+                )
             try:
+                response = await client.send(request, stream=True, follow_redirects=False)
+            except BaseException:
+                if reservation is not None and self._budget is not None:
+                    self._budget.settle(*reservation, 0)
+                raise
+            try:
+                if self._budget is not None and response.status_code in {429, 503}:
+                    self._budget.backoff(str(request.url), response.headers.get("retry-after"))
+                    LOGGER.info(
+                        "domain rate limited",
+                        extra={"qc_status": response.status_code, "qc_domain": request.url.host},
+                    )
                 if response.next_request is not None:
                     history.append(response)
                     request = response.next_request
                     continue
                 response.raise_for_status()
                 content = (
-                    await read_response_limited(response, self._config.max_response_bytes)
+                    await read_response_limited(
+                        response, reservation[1] if reservation else self._config.max_response_bytes
+                    )
                     if method != "HEAD"
                     else b""
                 )
@@ -260,10 +333,24 @@ class TrafficGenerator:
                 return result
             finally:
                 self._stats.response_body_bytes_received += response.num_bytes_downloaded
+                if reservation is not None and self._budget is not None:
+                    self._budget.settle(*reservation, response.num_bytes_downloaded)
                 await response.aclose()
+
+    async def _refresh_trends_forever(self) -> None:
+        if self._trend_store is None:
+            return
+        while True:
+            await asyncio.sleep(self._config.trend_sources.refresh_hours * 3600)
+            snapshot = await self._trend_store.refresh()
+            if snapshot is not None:
+                self._trend_snapshot = snapshot
+                self._trend_day = None
 
     async def _pause_between_actions(self, deadline: float | None = None) -> None:
         pause_seconds = next_pause_seconds(self._config.pacing, self._rng)
+        if self._budget is not None:
+            pause_seconds = max(pause_seconds, 1.0)
         if pause_seconds <= 0:
             return
         if deadline is not None:

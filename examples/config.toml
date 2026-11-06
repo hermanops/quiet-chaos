@@ -72,6 +72,29 @@ url = "https://raw.githubusercontent.com/zakird/crux-top-lists/main/data/global/
 limit = 500
 refresh_hours = 24
 
+[trend_sources]
+# Discovery is separate from the seed sources above and is disabled by default.
+enabled = false
+refresh_hours = 24
+pool_size = 30
+lookback_days = 28
+tranco_limit = 10000
+umbrella_enabled = true
+majestic_enabled = false
+# Set QUIET_CHAOS_RADAR_TOKEN in the environment for Cloudflare Radar.
+# Optional monthly CrUX signal (never used as weekly momentum):
+# crux_url = "https://raw.githubusercontent.com/zakird/crux-top-lists/main/data/global/current.csv.gz"
+allow_domains = []
+deny_domains = []
+allow_categories = []
+deny_categories = []
+daily_domain_requests = 3
+daily_requests = 100
+daily_response_bytes = 26214400
+# Optional operator-assigned categories:
+# [trend_sources.categories]
+# "example.com" = ["news"]
+
 [user_agent_source]
 enabled = false
 url = "https://www.useragents.me"

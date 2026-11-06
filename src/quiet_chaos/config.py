@@ -26,6 +26,32 @@ class SeedSource(BaseModel):
     refresh_hours: int = Field(default=24, ge=1, le=168)
 
 
+class TrendConfig(BaseModel):
+    enabled: bool = False
+    refresh_hours: int = Field(default=24, ge=1, le=720)
+    pool_size: int = Field(default=30, ge=1, le=50)
+    lookback_days: int = Field(default=28, ge=7, le=90)
+    tranco_limit: int = Field(default=10_000, ge=100, le=100_000)
+    umbrella_enabled: bool = True
+    majestic_enabled: bool = False
+    crux_url: HttpUrl | None = None
+    allow_domains: list[str] = Field(default_factory=list)
+    deny_domains: list[str] = Field(default_factory=list)
+    categories: dict[str, list[str]] = Field(default_factory=dict)
+    allow_categories: list[str] = Field(default_factory=list)
+    deny_categories: list[str] = Field(default_factory=list)
+    daily_domain_requests: int = Field(default=3, ge=1, le=100)
+    daily_requests: int = Field(default=100, ge=1, le=10_000)
+    daily_response_bytes: int = Field(default=25 * 1024 * 1024, ge=1, le=1_000_000_000)
+
+    @field_validator("crux_url")
+    @classmethod
+    def require_https_crux(cls, value: HttpUrl | None) -> HttpUrl | None:
+        if value is not None and (value.scheme != "https" or value.username or value.password):
+            raise ValueError("crux_url must use HTTPS without credentials")
+        return value
+
+
 class HealthConfig(BaseModel):
     enabled: bool = True
     host: str = "127.0.0.1"
@@ -99,6 +125,7 @@ class AppConfig(BaseModel):
     modes: list[TrafficMode] = Field(default_factory=lambda: list(TrafficMode))
     seed_urls: list[HttpUrl] = Field(default_factory=lambda: DEFAULT_SEED_URLS.copy())
     seed_sources: list[SeedSource] = Field(default_factory=lambda: [SeedSource()])
+    trend_sources: TrendConfig = Field(default_factory=TrendConfig)
     deny_domains: list[str] = Field(default_factory=lambda: DEFAULT_DENY_DOMAINS.copy())
     user_agents: list[str] = Field(default_factory=lambda: DEFAULT_USER_AGENTS.copy())
     user_agent_source: UserAgentSourceConfig = Field(default_factory=UserAgentSourceConfig)

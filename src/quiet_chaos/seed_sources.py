@@ -33,7 +33,9 @@ class SeedStore:
     def urls(self) -> list[str]:
         return self._urls.copy()
 
-    async def load(self, refresh: bool = False) -> list[str]:
+    async def load(
+        self, refresh: bool = False, trend_observations: dict[str, dict] | None = None
+    ) -> list[str]:
         urls = [str(url) for url in self._config.seed_urls]
         async with httpx.AsyncClient(
             follow_redirects=True,
@@ -43,6 +45,23 @@ class SeedStore:
             timeout=30,
         ) as client:
             for source in self._config.seed_sources:
+                if trend_observations is not None:
+                    from quiet_chaos.trend_sources import TRANCO_URL
+
+                    provider = None
+                    if source.kind == "tranco_zip" and str(source.url) == TRANCO_URL:
+                        provider = "tranco"
+                    elif (
+                        source.kind == "crux_gzip_csv"
+                        and self._config.trend_sources.crux_url is not None
+                        and str(source.url) == str(self._config.trend_sources.crux_url)
+                    ):
+                        provider = "crux"
+                    if provider is not None:
+                        observation = trend_observations.get(provider, {})
+                        domains = list(observation.get("ranks", {}))[: source.limit]
+                        urls.extend(domains)
+                        continue
                 urls.extend(await self._load_source(client, source, refresh))
 
         allowed = []
