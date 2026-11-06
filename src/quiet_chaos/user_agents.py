@@ -11,6 +11,7 @@ import httpx
 
 from quiet_chaos.config import AppConfig, UserAgentSourceConfig
 from quiet_chaos.defaults import DEFAULT_USER_AGENTS
+from quiet_chaos.downloads import MAX_SOURCE_BYTES, read_response_limited
 from quiet_chaos.safety import SafetyPolicy, SafetyTransport
 
 
@@ -49,17 +50,21 @@ class UserAgentStore:
             return cache_file.read_text(encoding="utf-8").splitlines()[: source.limit]
 
         try:
-            response = await client.get(
+            async with client.stream(
+                "GET",
                 str(source.url),
                 headers={"user-agent": DEFAULT_USER_AGENTS[0]},
-            )
-            response.raise_for_status()
+            ) as response:
+                response.raise_for_status()
+                content = await read_response_limited(response, MAX_SOURCE_BYTES)
         except httpx.HTTPError:
             if cache_file.exists():
                 return cache_file.read_text(encoding="utf-8").splitlines()[: source.limit]
             return []
 
-        agents = self._parse_useragents_me(response.text, source.limit)
+        agents = self._parse_useragents_me(
+            content.decode(response.encoding or "utf-8", errors="replace"), source.limit
+        )
         if agents:
             cache_file.write_text("\n".join(agents), encoding="utf-8")
         return agents

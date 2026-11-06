@@ -23,8 +23,7 @@ class SafetyPolicy:
             return False
         host = host.lower().rstrip(".")
         if "%" in host or any(
-            host == denied or host.endswith(f".{denied}") or host.startswith(denied)
-            for denied in self._deny_domains
+            host == denied or host.endswith(f".{denied}") for denied in self._deny_domains
         ):
             return False
         try:

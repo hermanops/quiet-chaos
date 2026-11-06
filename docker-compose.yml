@@ -3,6 +3,7 @@ services:
     build: .
     image: quiet-chaos:local
     restart: unless-stopped
+    cap_drop: ["ALL"]
     command:
       ["run", "--config", "/app/config.toml", "--cache-dir", "/home/nonroot/.cache/quiet-chaos"]
     ports:

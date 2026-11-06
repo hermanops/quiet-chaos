@@ -24,6 +24,14 @@ def test_safety_policy_rejects_unsafe_urls() -> None:
     assert not policy.is_allowed_url("https://api.example.internal/status")
 
 
+def test_safety_policy_matches_denied_domains_at_label_boundaries() -> None:
+    policy = SafetyPolicy(["example.com"])
+
+    assert not policy.is_allowed_url("https://example.com/")
+    assert not policy.is_allowed_url("https://api.example.com/")
+    assert policy.is_allowed_url("https://example.com.evil/")
+
+
 @pytest.mark.parametrize(
     "url",
     [

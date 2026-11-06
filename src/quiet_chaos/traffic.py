@@ -153,7 +153,6 @@ class TrafficGenerator:
             return None
         headers = browser_headers(random.choice(self._config.user_agents))
         self._stats.requests_attempted += 1
-        self._stats.last_url = url
         LOGGER.info("request", extra={"qc_method": method, "qc_url": url})
         try:
             response = await self._request_with_retries(client, method, url, headers)

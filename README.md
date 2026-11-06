@@ -102,6 +102,16 @@ schedule. For direct local execution, bind the health endpoint to `127.0.0.1`;
 the example's `0.0.0.0` binding is intended for Docker with localhost-only port
 publishing.
 
+The health endpoint is unauthenticated, so keep it on a trusted interface. Both
+Compose profiles publish it only on host loopback. The health response includes
+runtime counters but not the last requested URL. The host profile mounts
+`/opt/quiet-chaos/config.toml` read-only; ensure the file is readable and its
+parent directories are traversable by the container's `nonroot` user.
+
+The Dockerfile pins Chainguard base images by manifest digest for reproducible
+builds. To update them, inspect the desired Chainguard image manifests, update
+both digest references, and rebuild the image.
+
 ## Development
 
 ```bash

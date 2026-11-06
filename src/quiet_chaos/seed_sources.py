@@ -14,6 +14,11 @@ import httpx
 
 from quiet_chaos.config import AppConfig, SeedSource
 from quiet_chaos.defaults import DEFAULT_SEED_URLS
+from quiet_chaos.downloads import (
+    MAX_SOURCE_BYTES,
+    read_decompressed_limited,
+    read_response_limited,
+)
 from quiet_chaos.safety import SafetyPolicy, SafetyTransport
 
 
@@ -64,14 +69,16 @@ class SeedStore:
         if not refresh and self._is_fresh(cache_file, source.refresh_hours):
             return cache_file.read_text(encoding="utf-8").splitlines()[: source.limit]
 
-        response = await client.get(str(source.url))
-        response.raise_for_status()
+        async with client.stream("GET", str(source.url)) as response:
+            response.raise_for_status()
+            content = await read_response_limited(response, MAX_SOURCE_BYTES)
         if source.kind == "tranco_zip":
-            domains = self._parse_tranco_zip(response.content, source.limit)
+            domains = self._parse_tranco_zip(content, source.limit)
         elif source.kind == "crux_gzip_csv":
-            domains = self._parse_crux_gzip_csv(response.content, source.limit)
+            domains = self._parse_crux_gzip_csv(content, source.limit)
         else:
-            domains = self._parse_text_domains(response.text, source.limit)
+            text = content.decode("utf-8", errors="replace")
+            domains = self._parse_text_domains(text, source.limit)
         cache_file.write_text("\n".join(domains), encoding="utf-8")
         return domains
 
@@ -83,12 +90,16 @@ class SeedStore:
         return datetime.now(UTC) - modified_at < timedelta(hours=refresh_hours)
 
     @staticmethod
-    def _parse_tranco_zip(content: bytes, limit: int) -> list[str]:
+    def _parse_tranco_zip(
+        content: bytes, limit: int, max_bytes: int = MAX_SOURCE_BYTES
+    ) -> list[str]:
         with zipfile.ZipFile(io.BytesIO(content)) as archive:
             csv_name = archive.namelist()[0]
-            rows = archive.read(csv_name).decode("utf-8", errors="replace").splitlines()
+            with archive.open(csv_name) as csv_file:
+                csv_content = read_decompressed_limited(csv_file, max_bytes)
+        rows = csv.reader(io.StringIO(csv_content.decode("utf-8", errors="replace")))
         domains: list[str] = []
-        for row in csv.reader(rows):
+        for row in rows:
             if len(row) >= 2:
                 domains.append(f"https://{row[1].strip()}/")
             if len(domains) >= limit:
@@ -96,10 +107,14 @@ class SeedStore:
         return domains
 
     @staticmethod
-    def _parse_crux_gzip_csv(content: bytes, limit: int) -> list[str]:
-        rows = gzip.decompress(content).decode("utf-8", errors="replace").splitlines()
+    def _parse_crux_gzip_csv(
+        content: bytes, limit: int, max_bytes: int = MAX_SOURCE_BYTES
+    ) -> list[str]:
+        with gzip.GzipFile(fileobj=io.BytesIO(content)) as gzip_file:
+            csv_content = read_decompressed_limited(gzip_file, max_bytes)
+        rows = csv.DictReader(io.StringIO(csv_content.decode("utf-8", errors="replace")))
         domains: list[str] = []
-        for row in csv.DictReader(rows):
+        for row in rows:
             origin = (row.get("origin") or "").strip()
             if not origin:
                 continue
