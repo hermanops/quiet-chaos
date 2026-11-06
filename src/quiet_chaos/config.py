@@ -40,9 +40,9 @@ class TrendConfig(BaseModel):
     categories: dict[str, list[str]] = Field(default_factory=dict)
     allow_categories: list[str] = Field(default_factory=list)
     deny_categories: list[str] = Field(default_factory=list)
-    daily_domain_requests: int = Field(default=3, ge=1, le=100)
-    daily_requests: int = Field(default=100, ge=1, le=10_000)
-    daily_response_bytes: int = Field(default=25 * 1024 * 1024, ge=1, le=1_000_000_000)
+    daily_domain_requests: int = Field(default=10, ge=1, le=100)
+    daily_requests: int = Field(default=500, ge=1, le=10_000)
+    daily_response_bytes: int = Field(default=100 * 1024 * 1024, ge=1, le=1_000_000_000)
 
     @field_validator("crux_url")
     @classmethod

@@ -4,6 +4,16 @@ All notable changes to Quiet Chaos are documented here.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-06
+
+### Changed
+
+- Raise default daily trend budgets to 10 requests per registrable domain, 500 requests total, and 100 MiB of response body bytes.
+
+### Fixed
+
+- Check out the repository in the release workflow so it can read the changelog when creating release notes.
+
 ## [0.4.0] - 2026-11-06
 
 ### Changed
@@ -52,7 +62,8 @@ All notable changes to Quiet Chaos are documented here.
 - Missing RSS feed paths are handled gracefully.
 - Health requests are bounded and validated, and container probes use the same optional token as the server.
 
-[Unreleased]: https://github.com/hermanops/quiet-chaos/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/hermanops/quiet-chaos/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/hermanops/quiet-chaos/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/hermanops/quiet-chaos/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/hermanops/quiet-chaos/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/hermanops/quiet-chaos/compare/v0.1.3...v0.2.0

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quiet-chaos"
-version = "0.4.0"
+version = "0.5.0"
 description = "A bounded, observable HTTP/DNS traffic noise generator for personal privacy experiments."
 readme = "README.md"
 requires-python = ">=3.12"

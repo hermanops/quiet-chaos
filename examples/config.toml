@@ -82,9 +82,9 @@ allow_domains = []
 deny_domains = []
 allow_categories = []
 deny_categories = []
-daily_domain_requests = 3
-daily_requests = 100
-daily_response_bytes = 26214400
+daily_domain_requests = 10
+daily_requests = 500
+daily_response_bytes = 104857600
 # Optional operator-assigned categories:
 # [trend_sources.categories]
 # "example.com" = ["news"]

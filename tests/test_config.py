@@ -28,6 +28,9 @@ def test_default_config_is_bounded() -> None:
     assert config.trend_sources.enabled is True
     assert config.trend_sources.pool_size == 30
     assert config.trend_sources.refresh_hours == 24
+    assert config.trend_sources.daily_domain_requests == 10
+    assert config.trend_sources.daily_requests == 500
+    assert config.trend_sources.daily_response_bytes == 100 * 1024 * 1024
 
 
 def test_trend_configuration_can_be_disabled_and_is_bounded(tmp_path: Path) -> None:
@@ -75,6 +78,9 @@ def test_example_configs_inherit_safe_defaults() -> None:
         assert config.deny_domains == DEFAULT_DENY_DOMAINS
         assert config.run_for_seconds == duration
         assert config.max_response_bytes == 1_000_000
+        assert config.trend_sources.daily_domain_requests == 10
+        assert config.trend_sources.daily_requests == 500
+        assert config.trend_sources.daily_response_bytes == 100 * 1024 * 1024
         assert not SafetyPolicy(config.deny_domains).is_allowed_url("http://172.17.0.1/")
 
 

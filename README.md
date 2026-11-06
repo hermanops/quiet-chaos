@@ -159,8 +159,8 @@ Categories are operator-supplied; an allow-category filter excludes unknowns.
 Popularity lists include infrastructure and are not guarantees of public
 websites or content suitability; review the pool and configure deny rules.
 
-When enabled, persistent UTC-day budgets default to three requests per
-registrable domain, 100 requests total, and 25 MiB of response wire-body bytes.
+Persistent UTC-day budgets default to 10 requests per registrable domain, 500
+requests total, and 100 MiB of response wire-body bytes.
 They cover all generated HTTP attempts, redirects, retries, and DNS actions,
 not just trend origins. HTTPS is required in this mode. HTTP 429/503 causes a
 per-domain cooldown honoring `Retry-After`, or one hour when absent or invalid.
