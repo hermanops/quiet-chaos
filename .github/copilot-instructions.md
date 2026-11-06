@@ -48,3 +48,8 @@ CI runs Ruff lint, Ruff format check, and pytest on Python 3.12-3.14, plus a Doc
 - Tests live in `tests/`; pytest's `asyncio_mode = "auto"` means async tests do not need an explicit asyncio marker. Prefer test factory functions for setup, `httpx.MockTransport` for HTTP behavior, and `monkeypatch` for simple stubs.
 - Cache keys for seed sources use SHA-256 so they remain stable across processes. Failure cooldowns are keyed by hostname, not full URL.
 - `examples/config.srv.toml` is a host-deployment template, not an automatically loaded config; the host Compose setup expects it to be copied to `/opt/quiet-chaos/config.toml`.
+
+## Workflow preferences
+
+- Treat `seed_urls`, `search_queries`, and trend pools as additive traffic sources, not allowlists. Preserve broader browsing and do not blanket-deny trend candidates unless explicitly requested.
+- For release requests, follow the [release prompt](prompts/release.prompt.md), including its validation and approval gates.
